@@ -15,10 +15,16 @@ class Box:
     ----
     location: str
         The label of the box location.
-    appear_rate: float
-        The transition probability from 'no food' state to 'has food' state.
-    vanish_rate: float
-        The transition probability from 'has food' state to 'no food' state.
+    p_appear: float
+        The probability of food appearing.
+    p_vanish: float
+        The probability of food vanishing.
+    max_color: int
+        The maximum number of color cue. Color cue is an integer in
+        ``[0, max_color]``.
+    p_low, p_high:
+        The binomial distribution parameters for color cue, corresponding to
+        'no food' and 'has food' conditions respectively.
 
     """
 
@@ -37,11 +43,12 @@ class Box:
         r"""Updates the box for one time step.
 
         """
+        # update food availability
         if self.has_food and np.random.rand()<self.vanish_rate:
             self.has_food = False
         if not self.has_food and np.random.rand()<self.appear_rate:
             self.has_food = True
-
+        # update color cue
         self.color = np.random.binomial(
             self.max_color, self.p_high if self.has_food else self.p_low,
             )
