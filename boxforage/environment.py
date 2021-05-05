@@ -6,10 +6,13 @@ Created on Sat May  1 15:33:44 2021
 """
 
 import numpy as np
+rng = np.random.default_rng()
 
 
 class Box:
-    r"""The box containing food.
+    r"""Food box with color cue.
+
+    The box color is a random varialbe drawn from a binomial distribution.
 
     Args
     ----
@@ -29,7 +32,7 @@ class Box:
     """
 
     def __init__(self, location, p_appear, p_vanish,
-                 max_color, p_low=0.2, p_high=0.8):
+                 max_color=5, p_low=0.4, p_high=0.6):
         self.location = location
         self.p_appear = p_appear
         self.p_vanish = p_vanish
@@ -37,18 +40,18 @@ class Box:
         self.p_low, self.p_high = p_low, p_high
 
         self.has_food = False
-        self.color = 0
+        self.color = None
 
     def step(self):
         r"""Updates the box for one time step.
 
         """
         # update food availability
-        if self.has_food and np.random.rand()<self.vanish_rate:
+        if self.has_food and rng.random()<self.p_vanish:
             self.has_food = False
-        if not self.has_food and np.random.rand()<self.appear_rate:
+        if not self.has_food and rng.random()<self.p_appear:
             self.has_food = True
         # update color cue
-        self.color = np.random.binomial(
+        self.color = rng.binomial(
             self.max_color, self.p_high if self.has_food else self.p_low,
             )
