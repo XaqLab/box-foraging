@@ -5,6 +5,8 @@ import numpy as np
 from typing import Optional
 RandomGenerator = np.random.Generator
 
+from .utils import get_spec
+
 class Box:
     """Food box with a monochromatic cue.
 
@@ -19,9 +21,9 @@ class Box:
         p_appear: float,
         p_vanish: float,
         *,
-        num_grades: int = 5,
-        p_true: float = 0.6,
-        p_false: float = 0.2,
+        num_grades: int,
+        p_true: float,
+        p_false: float,
         rng: Optional[RandomGenerator] = None,
     ):
         r"""
@@ -106,6 +108,9 @@ class ForagingEnvironment(gym.Env):
 
         """
         super(ForagingEnvironment, self).__init__()
+
+        assert 'num_boxes' in boxes_spec, "Number of boxes must be specified."
+        boxes_spec = get_spec('boxes', **boxes_spec)
         self.num_boxes = boxes_spec['num_boxes']
         self.num_grades = boxes_spec['num_grades']
         self.p_appear = self._get_array(boxes_spec['p_appear'], self.num_boxes)
@@ -113,6 +118,7 @@ class ForagingEnvironment(gym.Env):
         self.p_true = self._get_array(boxes_spec['p_true'], self.num_boxes)
         self.p_false = self._get_array(boxes_spec['p_false'], self.num_boxes)
 
+        reward_spec = get_spec('reward', **reward_spec)
         self.r_food = reward_spec['food']
         self.r_move = self._get_array(reward_spec['move'], self.num_boxes+1)
         self.r_time = reward_spec['time']
@@ -128,6 +134,19 @@ class ForagingEnvironment(gym.Env):
         self.episodic = episodic
         self.rng = np.random.default_rng(seed)
         self.reset()
+
+    def get_spec(self, name):
+        r"""Returns environment specifications."""
+        if name=='boxes':
+            return {
+                'num_boxes': self.num_boxes, 'num_grades': self.num_grades,
+                'p_appear': self.p_appear, 'p_vanish': self.p_vanish,
+                'p_true': self.p_true, 'p_false': self.p_false,
+            }
+        if name=='reward':
+            return {
+                'r_food': self.r_food, 'r_move': self.r_move, 'r_time': self.r_time,
+            }
 
     def reset(self):
         r"""Resets environment."""
