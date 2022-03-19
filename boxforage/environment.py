@@ -212,6 +212,56 @@ class ForagingEnvironment(gym.Env):
         info = {'state': self.get_state()}
         return obs, reward, done, info
 
+    def run_one_trial(self, algo=None, num_steps=100):
+        r"""Runs a test trial.
+
+        Args
+        ----
+        algo: SB3.Algo
+            A stable-baselines 3 algorithm. Random policy is used when `algo` is
+            ``None``.
+        num_steps: int
+            The number of steps in the trial. Environment is set to non-episodic
+            temporarily.
+
+        Returns
+        -------
+        trial: dict
+            Information of the trial.
+
+        """
+        actions, rewards = [], []
+        has_foods, color_cues, agent_poss = [], [], []
+
+        _episodic = self.episodic # to change back later
+        self.episodic = False
+        if algo is not None:
+            algo.policy.set_training_mode(False)
+
+        obs = self.reset()
+        for _ in range(num_steps):
+            if algo is None: # random policy
+                action = self.action_space.sample()
+            else:
+                action, _ = algo.predict(obs)
+            obs, reward, _, info = self.step(action)
+
+            actions.append(action)
+            rewards.append(reward)
+            has_foods.append(info['state'][:self.num_boxes])
+            color_cues.append(obs[:self.num_boxes])
+            agent_poss.append(obs[-1])
+
+        trial = {
+            'actions': np.array(actions),
+            'rewards': np.array(rewards),
+            'has_foods': np.array(has_foods),
+            'color_cues': np.array(color_cues),
+            'agent_poss': np.array(agent_poss),
+        }
+        self.episodic = _episodic
+        return trial
+
     @staticmethod
     def _get_array(val, n):
         r"""Returns an array of desired length."""
