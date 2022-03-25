@@ -87,7 +87,7 @@ class ForagingEnvironment(gym.Env):
     def __init__(
         self,
         boxes_spec: dict = None,
-        reward_spec: dict = None,
+        reward_spec: Optional[dict] = None,
         *,
         episodic: bool = True,
         seed: Optional[int] = None,
@@ -118,9 +118,12 @@ class ForagingEnvironment(gym.Env):
         self.p_true = self._get_array(boxes_spec['p_true'], self.num_boxes)
         self.p_false = self._get_array(boxes_spec['p_false'], self.num_boxes)
 
+        if reward_spec is None:
+            reward_spec = {}
         reward_spec = get_spec('reward', **reward_spec)
         self.r_food = reward_spec['food']
         self.r_move = self._get_array(reward_spec['move'], self.num_boxes+1)
+        self.r_fetch = reward_spec['fetch']
         self.r_time = reward_spec['time']
 
         self.state_space = MultiDiscrete(
@@ -145,7 +148,10 @@ class ForagingEnvironment(gym.Env):
             }
         if name=='reward':
             return {
-                'r_food': self.r_food, 'r_move': self.r_move, 'r_time': self.r_time,
+                'r_food': self.r_food,
+                'r_move': self.r_move,
+                'r_fetch': self.r_fetch,
+                'r_time': self.r_time,
             }
 
     def reset(self):

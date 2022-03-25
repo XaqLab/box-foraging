@@ -12,7 +12,7 @@ def get_spec(name, **kwargs):
         }
     if name=='reward':
         spec = {
-            'food': 10., 'move': -2., 'time': -0.5,
+            'food': 10., 'move': -2., 'fetch': -1., 'time': -0.5,
         }
 
     for key in spec:
