@@ -1,3 +1,7 @@
+import matplotlib.pyplot as plt
+import numpy as np
+
+
 def get_spec(name, **kwargs):
     r"""Returns environment specifications.
 
@@ -19,3 +23,49 @@ def get_spec(name, **kwargs):
         if key in kwargs:
             spec[key] = kwargs[key]
     return spec
+
+def plot_experience(trial, figsize=(8, 2)):
+    r"""Plots agent experience in one trial."""
+    actions = trial['actions']
+    rewards = trial['rewards']
+    color_cues = trial['color_cues']
+    agent_poss = trial['agent_poss']
+
+    num_steps, num_boxes = color_cues.shape
+    fig_w, fig_h = figsize
+    aspect = num_steps/(num_boxes+1)*fig_h/fig_w*1.5
+    t = np.arange(1, num_steps+1)
+    num_grades = color_cues.max()
+
+    fig, ax = plt.subplots(figsize=figsize)
+    h = ax.imshow(color_cues.T, aspect=aspect, extent=[0.5, num_steps+0.5, -0.5, num_boxes-0.5], origin='lower', cmap='gray')
+    ax.set_ylim([-0.5, num_boxes+0.5])
+    idxs = (actions!=num_boxes+1)|(agent_poss==num_boxes)
+    ax.scatter(t[idxs], agent_poss[idxs], color='blue', marker='.', s=10)
+    idxs = (actions==num_boxes+1)&(agent_poss<num_boxes)&(rewards>0)
+    ax.scatter(t[idxs], agent_poss[idxs], color='lime', marker='o', s=50)
+    idxs = (actions==num_boxes+1)&(agent_poss<num_boxes)&(rewards<0)
+    ax.scatter(t[idxs], agent_poss[idxs], color='tomato', marker='x', s=50)
+    plt.colorbar(h, ticks=[0, num_grades], label='color cue')
+    ax.set_xlabel('time')
+    ax.set_yticks(range(num_boxes+1))
+    ax.set_yticklabels([f'box {i}' for i in range(num_boxes)]+['center'])
+    return fig, ax
+
+def plot_box_states(trial, figsize=(8, 1.5)):
+    r"""Plots true box states in one trial."""
+    has_foods = trial['has_foods']
+
+    num_steps, num_boxes = has_foods.shape
+    fig_w, fig_h = figsize
+    aspect = num_steps/num_boxes*fig_h/fig_w*1.5
+
+    fig, ax = plt.subplots(figsize=figsize)
+    h = ax.imshow(has_foods.T, aspect=aspect, extent=[0.5, num_steps+0.5, -0.5, num_boxes-0.5], origin='lower', cmap='gray')
+    ax.set_xlabel('time')
+    ax.set_yticks(range(num_boxes))
+    ax.set_yticklabels([f'box {i}' for i in range(num_boxes)])
+    cbar = plt.colorbar(h, label='has food')
+    cbar.set_ticks([0, 1])
+    cbar.set_ticklabels(['false', 'true'])
+    return fig, ax
