@@ -60,6 +60,29 @@ class BasicDiscetePotential(BasePotential):
         logits = self.embed(xs).squeeze(-1)
         return logits
 
+    def set_prob(self,
+        prob_dict: dict[tuple[int], float],
+        eps: float = 1e-4,
+    ):
+        r"""Sets parameters for a given probability distribution.
+
+        Args
+        ----
+        prob_dict:
+            Relative probabilities for different variable values. Values not
+            included are assigned with a small probability.
+        eps:
+            The probability that all values not in `prob_dict` account for.
+
+        """
+        n_small = np.prod(self.nvec)-len(prob_dict)
+        self.embed.weight.data = torch.ones_like(self.embed.weight.data)*np.log(eps/n_small)
+        z = sum(prob_dict.values())
+        for x, p in prob_dict.items():
+            idx = np.ravel_multi_index(x, self.nvec)
+            self.embed.weight.data[idx] = np.log(p/z)
+        self.embed.weight.data -= self.embed.weight.data.mean()
+
 
 class BasicContinuousPotential(BasePotential):
     r"""Basic potential for continuous variables.
@@ -200,11 +223,17 @@ class EnergyBasedDistribution(nn.Module):
 class DiscreteDistribution(EnergyBasedDistribution):
     r"""Distribution for discrete variables."""
 
-    def __init__(
-        self,
+    def __init__(self,
         space: MultiDiscrete,
         **kwargs,
     ):
+        r"""
+        Args
+        ----
+        space:
+            A MultiDiscrete space.
+
+        """
         super(DiscreteDistribution, self).__init__(space, **kwargs)
 
     def _all_xs(self):
