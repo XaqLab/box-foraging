@@ -81,6 +81,7 @@ class BasicDiscetePotential(BasePotential):
             self.embed.weight.data *= np.log(eps/n_small)
         z = sum(prob_dict.values())
         for x, p in prob_dict.items():
+            assert p>eps
             idx = np.ravel_multi_index(x, self.nvec)
             self.embed.weight.data[idx] = np.log(p/z)
         self.embed.weight.data -= self.embed.weight.data.mean() # shift baseline

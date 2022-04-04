@@ -35,7 +35,6 @@ def plot_experience(trial, figsize=(8, 2), num_grades=None):
     fig_w, fig_h = figsize
     aspect = num_steps/(num_boxes+1)*fig_h/fig_w*1.5
     t = np.arange(1, num_steps+1)
-    num_grades = color_cues.max()
 
     fig, ax = plt.subplots(figsize=figsize)
     if num_grades is None:
