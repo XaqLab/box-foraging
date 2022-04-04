@@ -24,7 +24,7 @@ def get_spec(name, **kwargs):
             spec[key] = kwargs[key]
     return spec
 
-def plot_experience(trial, figsize=(8, 2)):
+def plot_experience(trial, figsize=(8, 2), num_grades=None):
     r"""Plots agent experience in one trial."""
     actions = trial['actions']
     rewards = trial['rewards']
@@ -38,14 +38,19 @@ def plot_experience(trial, figsize=(8, 2)):
     num_grades = color_cues.max()
 
     fig, ax = plt.subplots(figsize=figsize)
-    h = ax.imshow(color_cues.T, aspect=aspect, extent=[0.5, num_steps+0.5, -0.5, num_boxes-0.5], origin='lower', cmap='gray')
+    if num_grades is None:
+        num_grades = color_cues.max()
+    h = ax.imshow(
+        color_cues.T, aspect=aspect, extent=[0.5, num_steps+0.5, -0.5, num_boxes-0.5],
+        vmin=0, vmax=num_grades, origin='lower', cmap='coolwarm',
+        )
     ax.set_ylim([-0.5, num_boxes+0.5])
     idxs = (actions!=num_boxes+1)|(agent_poss==num_boxes)
     ax.scatter(t[idxs], agent_poss[idxs], color='blue', marker='.', s=10)
     idxs = (actions==num_boxes+1)&(agent_poss<num_boxes)&(rewards>0)
-    ax.scatter(t[idxs], agent_poss[idxs], color='lime', marker='o', s=50)
+    ax.scatter(t[idxs], agent_poss[idxs], color='turquoise', marker='o', s=50)
     idxs = (actions==num_boxes+1)&(agent_poss<num_boxes)&(rewards<0)
-    ax.scatter(t[idxs], agent_poss[idxs], color='tomato', marker='x', s=50)
+    ax.scatter(t[idxs], agent_poss[idxs], color='gold', marker='x', s=50)
     plt.colorbar(h, ticks=[0, num_grades], label='color cue')
     ax.set_xlabel('time')
     ax.set_yticks(range(num_boxes+1))
@@ -61,7 +66,10 @@ def plot_box_states(trial, figsize=(8, 1.5)):
     aspect = num_steps/num_boxes*fig_h/fig_w*1.5
 
     fig, ax = plt.subplots(figsize=figsize)
-    h = ax.imshow(has_foods.T, aspect=aspect, extent=[0.5, num_steps+0.5, -0.5, num_boxes-0.5], origin='lower', cmap='gray')
+    h = ax.imshow(
+        has_foods.T, aspect=aspect, extent=[0.5, num_steps+0.5, -0.5, num_boxes-0.5],
+        origin='lower', cmap='coolwarm',
+        )
     ax.set_xlabel('time')
     ax.set_yticks(range(num_boxes))
     ax.set_yticklabels([f'box {i}' for i in range(num_boxes)])
