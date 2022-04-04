@@ -5,7 +5,7 @@ from torch.utils.data import TensorDataset, DataLoader
 
 from typing import Union, Optional
 from torch.optim import Optimizer
-from boxforage.distributions import EnergyBasedDistribution
+from .distributions import EnergyBasedDistribution
 Array = np.ndarray
 Tensor = torch.Tensor
 
