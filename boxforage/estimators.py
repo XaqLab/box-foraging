@@ -20,7 +20,7 @@ class Estimator:
     """
 
     def __init__(self,
-        optim_class: Union[str, Optimizer] = 'SGD',
+        optim_class: Union[Optimizer, str] = 'SGD',
         optim_kwargs: Optional[dict] = None,
         train_config: Optional[dict] = None,
     ):
@@ -69,18 +69,18 @@ class Estimator:
 
         Args
         ----
-        xs: (num_samples, num_dims)
+        xs: (num_samples, num_vars)
             Data samples.
         dist:
             An energy based distribution.
 
         """
         # prepare training/validation sets
-        dataset = TensorDataset(torch.tensor(xs))
-        train_size = int(len(dataset)*self.train_config['split_ratio'])
-        val_size = len(dataset)-train_size
-        assert train_size>0 and val_size>0, "number of samples ({}) too small".format(xs)
-        dset_train, dset_val = torch.utils.data.random_split(dataset, [train_size, val_size])
+        dset = TensorDataset(torch.tensor(xs))
+        train_size = int(len(dset)*self.train_config['split_ratio'])
+        val_size = len(dset)-train_size
+        assert train_size>0 and val_size>0, "Number of samples ({}) is too small.".format(len(dset))
+        dset_train, dset_val = torch.utils.data.random_split(dset, [train_size, val_size])
         batch_size = -(-len(dset_train)//self.train_config['num_batches'])
         loader_train = DataLoader(dset_train, batch_size=batch_size, shuffle=True, drop_last=True)
         loader_val = DataLoader(dset_val, batch_size=batch_size)
