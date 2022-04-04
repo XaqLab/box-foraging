@@ -1,17 +1,15 @@
 import numpy as np
 import torch
-import torch.nn as nn
-from torch.optim import Optimizer, SGD, Adam
-from torch.utils.data import TensorDataset, DataLoader, random_split
-from torch.distributions.categorical import Categorical
 from gym.spaces import MultiDiscrete, Box
 
 from typing import Union, Optional
 Array = np.ndarray
 Tensor = torch.Tensor
+VarSpace = Union[MultiDiscrete, Box]
+RandomGenerator = np.random.Generator
 
 
-class BasePotential(nn.Module):
+class BasePotential(torch.nn.Module):
     r"""Base class for potential."""
 
     def __init__(self):
@@ -21,12 +19,14 @@ class BasePotential(nn.Module):
         r"""Returns energy values of data samples.
 
         Args
-        xs: (num_samples, dim)
+        ----
+        xs: (num_samples, num_vars)
             Data samples.
 
         Returns
+        -------
         e: (num_samples,) Tensor
-            Energy values of input samples.
+            Energy values of data samples.
 
         """
         raise NotImplementedError
@@ -35,7 +35,7 @@ class BasePotential(nn.Module):
 class BasicDiscetePotential(BasePotential):
     r"""Basic potential for categorical variables.
 
-    MultiDiscrete samples are represented by one-hot vectors. Probabilities are
+    MultiDiscrete samples are treated as one-hot vectors. Probabilities are thus
     encoded by an embedding layer with parameters as logits.
 
     """
@@ -52,7 +52,7 @@ class BasicDiscetePotential(BasePotential):
         """
         super(BasicDiscetePotential, self).__init__()
         self.nvec = nvec
-        self.embed = nn.Embedding(np.prod(self.nvec), 1)
+        self.embed = torch.nn.Embedding(np.prod(self.nvec), 1)
 
     def forward(self, xs: Array):
         xs = np.ravel_multi_index(xs.T, self.nvec)
@@ -75,19 +75,19 @@ class BasicDiscetePotential(BasePotential):
             The probability that all values not in `prob_dict` account for.
 
         """
+        self.embed.weight.data = torch.ones_like(self.embed.weight.data)
         n_small = np.prod(self.nvec)-len(prob_dict)
-        self.embed.weight.data = torch.ones_like(self.embed.weight.data)*np.log(eps/n_small)
+        if n_small>0: # initiate probabilities with small values
+            self.embed.weight.data *= np.log(eps/n_small)
         z = sum(prob_dict.values())
         for x, p in prob_dict.items():
             idx = np.ravel_multi_index(x, self.nvec)
             self.embed.weight.data[idx] = np.log(p/z)
-        self.embed.weight.data -= self.embed.weight.data.mean()
+        self.embed.weight.data -= self.embed.weight.data.mean() # shift baseline
 
 
 class BasicContinuousPotential(BasePotential):
-    r"""Basic potential for continuous variables.
-
-    """
+    r"""Basic potential for continuous variables."""
 
     def __init__(self,
         num_vars: int,
@@ -102,8 +102,11 @@ class BasicContinuousPotential(BasePotential):
         super(BasicContinuousPotential, self).__init__()
         self.num_vars = num_vars
 
+    def forward(self, xs: Array):
+        raise NotImplementedError
 
-class EnergyBasedDistribution(nn.Module):
+
+class EnergyBasedDistribution(torch.nn.Module):
     r"""Energy based distributions.
 
     The probability (density) for each sample is characterized by a scalar of
@@ -113,9 +116,11 @@ class EnergyBasedDistribution(nn.Module):
     """
 
     def __init__(self,
-        space: Union[MultiDiscrete, Box],
+        space: VarSpace,
         idxs: Optional[list[list[int]]] = None,
         phis: Optional[list[Optional[BasePotential]]] = None,
+        *,
+        rng: Union[RandomGenerator, int, None] = None,
     ):
         r"""
         Args
@@ -129,27 +134,29 @@ class EnergyBasedDistribution(nn.Module):
         phis:
             Local potentials. If not provided, default basic potentials will be
             initialized.
+        rng:
+            Random number generator, designed for reproducibility.
 
         """
         super(EnergyBasedDistribution, self).__init__()
         if isinstance(space, MultiDiscrete):
             self.num_vars = len(space.nvec)
         if isinstance(space, Box):
-            assert len(space.shape)==1, "only supports 1D box space"
+            assert len(space.shape)==1, "Only supports 1D box space."
             self.num_vars = space.shape[0]
         self.space = space
         if idxs is None:
-            assert phis is None, "potential support is not specified"
-            self.idxs = [list(range(self.num_vars))]
+            assert phis is None, "Variable indices of potentials are not specified."
+            self.idxs = [list(range(self.num_vars))] # one global potential by default
         else:
             for idx in idxs:
-                assert set(idx).issubset(range(self.num_vars)), f"indices {idx} is invalid"
+                assert set(idx).issubset(range(self.num_vars)), f"Variable indices {idx} is invalid."
             self.idxs = idxs
         if phis is None:
             phis = [None]*len(self.idxs)
         else:
-            assert len(phis)==len(self.idxs), "list of variable indices and potentials should of the same length"
-        self.phis = nn.ModuleList()
+            assert len(phis)==len(self.idxs), "List of variable indices and potentials should be of the same length."
+        self.phis = torch.nn.ModuleList()
         for idx, phi in zip(self.idxs, phis):
             if phi is None:
                 if isinstance(space, MultiDiscrete):
@@ -159,10 +166,22 @@ class EnergyBasedDistribution(nn.Module):
             else:
                 self.phis.append(phi)
 
+        self.rng = rng if isinstance(rng, RandomGenerator) else np.random.default_rng(rng)
+
     def energy(self, xs):
         r"""Returns energy values of data samples.
 
         Energy values from each local poentials are summed up.
+
+        Args
+        ----
+        xs: (num_samples, num_vars)
+            Data samples.
+
+        Returns
+        -------
+        e: (num_samples,) Tensor
+            Energy values of data samples.
 
         """
         e = 0
@@ -187,7 +206,7 @@ class EnergyBasedDistribution(nn.Module):
 
         Args
         ----
-        xs: (num_samples, dim)
+        xs: (num_samples, num_vars)
             Data samples.
 
         Returns
@@ -264,10 +283,66 @@ class DiscreteDistribution(EnergyBasedDistribution):
     def sample(self,
         num_samples: Optional[int] = None
     ):
-        dist = Categorical(logits=self.energy(self._all_xs()))
-        if num_samples is None:
-            xs = dist.sample()
-        else:
-            xs = dist.sample(sample_shape=(num_samples,))
+        with torch.no_grad():
+            p = torch.nn.functional.softmax(self.energy(self._all_xs()), dim=0)
+        xs = self.rng.choice(
+            np.prod(self.space.nvec),
+            size=None if num_samples is None else (num_samples,),
+            p=p.numpy(),
+        )
         xs = np.stack(np.unravel_index(xs, self.space.nvec)).T
         return xs
+
+
+class IndependentDiscreteDistribution(DiscreteDistribution):
+    r"""Independent discrete distribution.
+
+    Each individual variable is associated with one potential.
+
+    """
+
+    def __init__(self,
+        space: MultiDiscrete,
+    ):
+        idxs = [[i] for i in range(len(space.nvec))]
+        super(IndependentDiscreteDistribution, self).__init__(space, idxs=idxs)
+
+    def set_probs(self,
+        prob_dicts: list[dict[tuple[int], float]],
+        eps: float = 1e-4,
+    ):
+        r"""Sets probabilities for each potential.
+
+        prob_dicts:
+            A list of length `self.num_vars`, containing the probability values
+            of each variable.
+        eps:
+            A small positive number to deal with zero probability.
+
+        """
+        for phi, prob_dict in zip(self.phis, prob_dicts):
+            phi.set_prob(prob_dict, eps)
+
+    def assign_delta(self,
+        x: Array,
+        eps: float = 1e-4,
+    ):
+        r"""Sets the distribution as a delta function on given value.
+
+        Args
+        ----
+        x:
+            Data sample that has a probability of 1.
+        eps:
+            A small positive number to deal with zero probability.
+
+        """
+        assert len(x)==self.num_vars
+        prob_dicts = []
+        for i in range(self.num_vars):
+            prob_dicts.append({(x[i],): 1.})
+        self.set_probs(prob_dicts, eps/self.num_vars)
+
+    def sample(self, num_samples=None):
+        # TODO more efficient implementation
+        return super(IndependentDiscreteDistribution, self).sample(num_samples)
