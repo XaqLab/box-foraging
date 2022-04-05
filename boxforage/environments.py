@@ -98,7 +98,7 @@ class BoxForagingObsModel(ObsModel):
         prob_dicts = []
         for i in range(self.num_boxes):
             p = self.p_true[i] if has_foods[i] else self.p_false[i]
-            vals = binom.pmf(np.arange(self.num_grades), self.num_grades, p)
+            vals = binom.pmf(np.arange(self.num_grades+1), self.num_grades, p)
             prob_dicts.append(dict(
                 ((k,), val) for k, val in enumerate(vals)
             ))
