@@ -31,6 +31,12 @@ class BasePotential(torch.nn.Module):
         """
         raise NotImplementedError
 
+    def get_param_vec(self):
+        raise NotImplementedError
+
+    def set_param_vec(self, param_vec):
+        raise NotImplementedError
+
 
 class BasicDiscetePotential(BasePotential):
     r"""Basic potential for categorical variables.
@@ -59,6 +65,13 @@ class BasicDiscetePotential(BasePotential):
         xs = torch.tensor(xs, device=self.embed.weight.device, dtype=torch.long)
         logits = self.embed(xs).squeeze(-1)
         return logits
+
+    def get_param_vec(self):
+        param_vec = self.embed.weight.data[:, 0].numpy()
+        return param_vec
+
+    def set_param_vec(self, param_vec):
+        self.embed.weight.data[:, 0] = torch.tensor(param_vec).to(self.embed.weight)
 
     def set_prob(self,
         prob_dict: dict[tuple[int], float],
@@ -158,6 +171,7 @@ class EnergyBasedDistribution(torch.nn.Module):
         else:
             assert len(phis)==len(self.idxs), "List of variable indices and potentials should be of the same length."
         self.phis = torch.nn.ModuleList()
+        self.num_params = []
         for idx, phi in zip(self.idxs, phis):
             if phi is None:
                 if isinstance(space, MultiDiscrete):
@@ -166,6 +180,7 @@ class EnergyBasedDistribution(torch.nn.Module):
                     self.phis.apend(BasicContinuousPotential(len(idx)))
             else:
                 self.phis.append(phi)
+            self.num_params.append(len(self.phis[-1].get_param_vec()))
 
         self.rng = rng if isinstance(rng, RandomGenerator) else np.random.default_rng(rng)
 
@@ -239,6 +254,16 @@ class EnergyBasedDistribution(torch.nn.Module):
         # TODO, Gibbs sampling
         raise NotImplementedError
 
+    def get_param_vec(self):
+        param_vec = np.concatenate([phi.get_param_vec() for phi in self.phis])
+        return param_vec
+
+    def set_param_vec(self, param_vec):
+        idx = 0
+        for i, phi in enumerate(self.phis):
+            phi.set_param_vec(param_vec[idx:(idx+self.num_params[i])])
+            idx += self.num_params[i]
+
 
 class DiscreteDistribution(EnergyBasedDistribution):
     r"""Distribution for discrete variables."""
@@ -289,7 +314,7 @@ class DiscreteDistribution(EnergyBasedDistribution):
         xs = self.rng.choice(
             np.prod(self.space.nvec),
             size=None if num_samples is None else (num_samples,),
-            p=p.numpy(),
+            p=p.cpu().numpy(),
         )
         xs = np.stack(np.unravel_index(xs, self.space.nvec)).T
         return xs
@@ -307,6 +332,13 @@ class IndependentDiscreteDistribution(DiscreteDistribution):
     ):
         idxs = [[i] for i in range(len(space.nvec))]
         super(IndependentDiscreteDistribution, self).__init__(space, idxs=idxs)
+
+    def __repr__(self):
+        p_strs = []
+        for phi in self.phis:
+            p = torch.nn.functional.softmax(phi.embed.weight.data, dim=0)
+            p_strs.append('['+', '.join(['{:.2f}'.format(p[i].item()) for i in range(len(p))])+']')
+        return '\n'.join(p_strs)
 
     def set_probs(self,
         prob_dicts: list[dict[tuple[int], float]],
