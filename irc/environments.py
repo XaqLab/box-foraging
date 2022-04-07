@@ -1,6 +1,7 @@
 import time
 import gym
 import numpy as np
+from gym.spaces import Box
 from .estimators import MaximumLikelihoodEstimator
 
 from typing import Optional
@@ -144,8 +145,12 @@ class BeliefMDPEnvironment(gym.Env):
         self.state_space = state_space
         self.action_space = action_space
         self.obs_space = obs_space
-
         self.belief = belief
+
+        # set up belief space as the 'observation_space' for gym.Env
+        b_param = self.belief.get_param_vec()
+        self.observation_space = Box(-np.inf, np.inf, shape=b_param.shape)
+
         self.transit_model = transit_model
         self.obs_model = obs_model
         self.est_spec = self._get_est_spec(est_spec or {})
