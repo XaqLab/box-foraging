@@ -122,6 +122,7 @@ class BoxForagingObsModel(ObsModel):
 class BoxForagingEnvironment(BeliefMDPEnvironment):
 
     def __init__(self,
+        *,
         boxes_spec: Optional[dict] = None,
         reward_spec: Optional[dict] = None,
         belief: Optional[Distribution] = None,

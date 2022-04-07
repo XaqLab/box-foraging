@@ -51,7 +51,7 @@ def plot_experience(trial, figsize=(8, 2), num_grades=None):
     idxs = (actions==num_boxes+1)&(agent_poss<num_boxes)&(rewards<0)
     h_false = ax.scatter(t[idxs], agent_poss[idxs], color='salmon', marker='x', s=50)
     plt.colorbar(h, ticks=[0, num_grades], label='color cue')
-    ax.legend([h_true, h_false], ['food', 'no food'])
+    ax.legend([h_true, h_false], ['food', 'no food'], loc='upper left')
     ax.set_xlabel('time')
     ax.set_yticks(range(num_boxes+1))
     ax.set_yticklabels([f'box {i}' for i in range(num_boxes)]+['center'])
