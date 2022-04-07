@@ -90,13 +90,15 @@ class BasicDiscetePotential(BasePotential):
         """
         self.embed.weight.data = torch.ones_like(self.embed.weight.data)
         n_small = np.prod(self.nvec)-len(prob_dict)
-        if n_small>0: # initiate probabilities with small values
-            self.embed.weight.data *= np.log(eps/n_small)
+        if n_small>0:
+            self.embed.weight.data *= np.log(eps/n_small) # initiate probabilities with small values
+        else:
+            eps = 0 # all probabilities are specified
         z = sum(prob_dict.values())
         for x, p in prob_dict.items():
             assert p>eps
             idx = np.ravel_multi_index(x, self.nvec)
-            self.embed.weight.data[idx] = np.log(p/z)
+            self.embed.weight.data[idx] = np.log(p/z*(1-eps))
         self.embed.weight.data -= self.embed.weight.data.mean() # shift baseline
 
 
