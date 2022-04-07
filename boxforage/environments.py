@@ -1,24 +1,36 @@
 from gym.spaces import Discrete, MultiDiscrete
 import numpy as np
+import torch
 from scipy.stats import binom
 from irc.distributions import IndependentDiscreteDistribution
 from irc.environments import TransitModel, ObsModel, BeliefMDPEnvironment
 
 from typing import Optional
 from irc.distributions import VarSpace
+from irc.distributions import EnergyBasedDistribution as Distribution
 RandomGenerator = np.random.Generator
 
 from .utils import get_spec
 
 
+def _get_spaces(boxes_spec):
+    state_space = MultiDiscrete( # box states and agent position
+        [2]*boxes_spec['num_boxes']+[boxes_spec['num_boxes']+1]
+    )
+    action_space = Discrete(boxes_spec['num_boxes']+2) # move and fetch
+    obs_space = MultiDiscrete( # color cues and agent position
+        [boxes_spec['num_grades']+1]*boxes_spec['num_boxes']+[boxes_spec['num_boxes']+1]
+    )
+    return state_space, action_space, obs_space
+
+
 class BoxForagingTransitModel(TransitModel):
 
     def __init__(self,
-        state_space: VarSpace,
-        action_space: Discrete,
         boxes_spec: dict,
         reward_spec: dict,
     ):
+        state_space, action_space, _ = _get_spaces(boxes_spec)
         super(BoxForagingTransitModel, self).__init__(state_space, action_space)
         self.num_boxes = boxes_spec['num_boxes']
         self.p_appear = boxes_spec['p_appear']
@@ -83,9 +95,9 @@ class BoxForagingTransitModel(TransitModel):
 class BoxForagingObsModel(ObsModel):
 
     def __init__(self,
-        obs_space,
         boxes_spec,
     ):
+        _, _, obs_space = _get_spaces(boxes_spec)
         super(BoxForagingObsModel, self).__init__(obs_space)
         self.num_boxes = boxes_spec['num_boxes']
         self.num_grades = boxes_spec['num_grades']
@@ -112,6 +124,8 @@ class BoxForagingEnvironment(BeliefMDPEnvironment):
     def __init__(self,
         boxes_spec: Optional[dict] = None,
         reward_spec: Optional[dict] = None,
+        belief: Optional[Distribution] = None,
+        **kwargs,
     ):
         boxes_spec = get_spec('boxes', **(boxes_spec or {}))
         self.num_boxes = boxes_spec['num_boxes']
@@ -123,17 +137,15 @@ class BoxForagingEnvironment(BeliefMDPEnvironment):
         reward_spec['move'] = self._get_array(reward_spec['move'], self.num_boxes+1)
         self.boxes_spec, self.reward_spec = boxes_spec, reward_spec
 
-        state_space = MultiDiscrete( # box states and agent position
-            [2]*self.num_boxes+[self.num_boxes+1]
-        )
-        action_space = Discrete(boxes_spec['num_boxes']+2) # move and fetch
-        obs_space = MultiDiscrete( # color cues and agent position
-            [boxes_spec['num_grades']+1]*self.num_boxes+[self.num_boxes+1]
-        )
+        state_space, action_space, obs_space = _get_spaces(boxes_spec)
+        if belief is None:
+            belief = IndependentDiscreteDistribution(state_space)
+        if 'transit_model' not in kwargs:
+            kwargs['transit_model'] = BoxForagingTransitModel(boxes_spec, reward_spec)
+        if 'obs_model' not in kwargs:
+            kwargs['obs_model'] = BoxForagingObsModel(boxes_spec)
         super(BoxForagingEnvironment, self).__init__(
-            state_space, action_space, obs_space,
-            transit_model=BoxForagingTransitModel(state_space, action_space, boxes_spec, reward_spec),
-            obs_model=BoxForagingObsModel(obs_space, boxes_spec),
+            state_space, action_space, obs_space, belief, **kwargs,
             )
 
     @staticmethod
@@ -157,7 +169,7 @@ class BoxForagingEnvironment(BeliefMDPEnvironment):
         state = [0]*self.num_boxes+[self.num_boxes]
         self.set_state(state)
         obs = self.obs_step(state)
-        return obs
+        return super(BoxForagingEnvironment, self).reset(obs)
 
     def run_one_trial(self, algo=None, num_steps=100):
         r"""Runs a test trial.
@@ -176,30 +188,41 @@ class BoxForagingEnvironment(BeliefMDPEnvironment):
             Information of the trial.
 
         """
-        actions, rewards = [], []
+        b_params, actions, rewards = [], [], []
+        box_beliefs = []
         has_foods, color_cues, agent_poss = [], [], []
 
         if algo is not None:
             algo.policy.set_training_mode(False)
 
-        obs = self.reset()
+        b_param = self.reset()
         for _ in range(num_steps):
-            color_cues.append(obs[:self.num_boxes])
-            agent_poss.append(obs[-1])
+            b_params.append(b_param)
+            if isinstance(self.belief, IndependentDiscreteDistribution):
+                box_belief = []
+                for i in range(self.num_boxes):
+                    phi = self.belief.phis[i]
+                    p = torch.softmax(phi.embed.weight.data, dim=0)[1].item()
+                    box_belief.append(p)
+                box_beliefs.append(box_belief)
 
             if algo is None: # random policy
                 action = self.action_space.sample()
             else:
-                action, _ = algo.predict(obs)
-            obs, reward, _, info = self.step(action)
-
+                action, _ = algo.predict(b_param)
             actions.append(action)
+
+            b_param, reward, _, info = self.step(action)
             rewards.append(reward)
-            has_foods.append(info['state'][:self.num_boxes])
+            has_foods.append(info['state'][:-1])
+            color_cues.append(info['obs'][:-1])
+            agent_poss.append(info['state'][-1])
 
         trial = {
+            'b_params': np.array(b_params),
             'actions': np.array(actions),
             'rewards': np.array(rewards),
+            'box_beliefs': np.array(box_beliefs),
             'has_foods': np.array(has_foods),
             'color_cues': np.array(color_cues),
             'agent_poss': np.array(agent_poss),

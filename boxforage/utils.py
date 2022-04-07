@@ -47,10 +47,11 @@ def plot_experience(trial, figsize=(8, 2), num_grades=None):
     idxs = (actions!=num_boxes+1)|(agent_poss==num_boxes)
     ax.scatter(t[idxs], agent_poss[idxs], color='blue', marker='.', s=10)
     idxs = (actions==num_boxes+1)&(agent_poss<num_boxes)&(rewards>0)
-    ax.scatter(t[idxs], agent_poss[idxs], color='cyan', marker='o', s=50)
+    h_true = ax.scatter(t[idxs], agent_poss[idxs], color='magenta', marker='o', s=50)
     idxs = (actions==num_boxes+1)&(agent_poss<num_boxes)&(rewards<0)
-    ax.scatter(t[idxs], agent_poss[idxs], color='salmon', marker='x', s=50)
+    h_false = ax.scatter(t[idxs], agent_poss[idxs], color='salmon', marker='x', s=50)
     plt.colorbar(h, ticks=[0, num_grades], label='color cue')
+    ax.legend([h_true, h_false], ['food', 'no food'])
     ax.set_xlabel('time')
     ax.set_yticks(range(num_boxes+1))
     ax.set_yticklabels([f'box {i}' for i in range(num_boxes)]+['center'])
@@ -75,4 +76,24 @@ def plot_box_states(trial, figsize=(8, 1.5)):
     cbar = plt.colorbar(h, label='has food')
     cbar.set_ticks([0, 1])
     cbar.set_ticklabels(['false', 'true'])
+    return fig, ax
+
+def plot_box_beliefs(trial, figsize=(8, 1.5)):
+    r"""Plots true box states in one trial."""
+    box_beliefs = trial['box_beliefs']
+
+    num_steps, num_boxes = box_beliefs.shape
+    fig_w, fig_h = figsize
+    aspect = num_steps/num_boxes*fig_h/fig_w*1.5
+
+    fig, ax = plt.subplots(figsize=figsize)
+    h = ax.imshow(
+        box_beliefs.T, aspect=aspect, extent=[-0.5, num_steps-0.5, -0.5, num_boxes-0.5],
+        vmin=0, vmax=1, origin='lower', cmap='coolwarm',
+        )
+    ax.set_xlabel('time')
+    ax.set_yticks(range(num_boxes))
+    ax.set_yticklabels([f'box {i}' for i in range(num_boxes)])
+    cbar = plt.colorbar(h, label='belief')
+    cbar.set_ticks([0, 1])
     return fig, ax
