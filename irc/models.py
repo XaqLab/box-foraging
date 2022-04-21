@@ -2,6 +2,7 @@ import time
 import numpy as np
 import torch
 from typing import Optional, Type, Union
+from gym.spaces import Discrete
 from jarvis.utils import progress_str, time_str
 
 from .distributions import BaseDistribution, DiscreteDistribution
@@ -201,3 +202,78 @@ class BaseModel:
             print("{} epochs trained on {} samples, log likelihood {:.3f} ({})".format(
                 num_epochs, num_samples, -loss.item(), time_str(toc-tic),
             ))
+
+
+class TransitionModel(BaseModel):
+    r"""Transition model."""
+
+    def __init__(self,
+        state_space: VarSpace,
+        action_space: Discrete,
+        **kwargs,
+    ):
+        r"""
+        Args
+        ----
+        state_space, action_space:
+            State and action spaces.
+
+        """
+        if isinstance(state_space, MultiDiscrete):
+            x_space = MultiDiscrete(list(state_space.nvec)+[action_space.n])
+        if isinstance(state_space, Box):
+            raise NotImplementedError
+        y_space = state_space
+        super(TransitionModel, self).__init__(x_space, y_space, **kwargs)
+        self.state_space = state_space
+        self.action_space = action_space
+
+    def estimate(self, s_t: Array, a_t: Array, s_tp1: Array, **kwargs):
+        r"""
+        Args
+        ----
+        s_t: (num_samples, num_vars)
+            States at time t.
+        a_t: (num_samples,)
+            Actions at time t.
+        s_tp1: (num_samples, num_vars)
+            States at time t+1.
+
+        """
+        xs = np.concatenate([s_t, a_t[:, None]], axis=1)
+        ys = s_tp1
+        super(TransitionModel, self).estimate(xs, ys, **kwargs)
+
+
+class ObserveModel(BaseModel):
+    r"""Observe model."""
+
+    def __init__(self,
+        state_space: VarSpace,
+        obs_space: VarSpace,
+        **kwargs,
+    ):
+        r"""
+        Args
+        ----
+        state_space, obs_space:
+            State and observation spaces.
+
+        """
+        x_space = state_space
+        y_space = obs_space
+        super(ObserveModel, self).__init__(x_space, y_space, **kwargs)
+        self.state_space = state_space
+        self.obs_space = obs_space
+
+    def estimate(self, s_t: Array, o_t: Array, **kwargs):
+        r"""
+        Args
+        ----
+        s_t: (num_samples, num_vars_s)
+            States at time t.
+        o_t: (num_samples, num_vars_o)
+            Observations at time t.
+
+        """
+        super(ObserveModel, self).estimate(s_t, o_t, **kwargs)
