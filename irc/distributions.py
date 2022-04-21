@@ -1,12 +1,10 @@
 import numpy as np
 import torch
+from torch.nn.functional import embedding
 from gym.spaces import MultiDiscrete, Box
 
 from typing import Union, Optional
-Array = np.ndarray
-Tensor = torch.Tensor
-VarSpace = Union[MultiDiscrete, Box]
-RandomGenerator = np.random.Generator
+from .utils import Array, Tensor, VarSpace, RandGen
 
 
 class BasePotential(torch.nn.Module):
@@ -15,13 +13,39 @@ class BasePotential(torch.nn.Module):
     def __init__(self):
         super(BasePotential, self).__init__()
 
-    def forward(self, xs: Array):
+    def get_param_vec(self):
+        r"""Returns the parameter vector.
+
+        Returns
+        -------
+        param_vec: (num_params,) Tensor
+
+        """
+        raise NotImplementedError
+
+    def set_param_vec(self, param_vec: Tensor):
+        r"""Sets the parameter vector.
+
+        Args
+        ----
+        param_vec: (num_params,)
+            Parameters vector.
+
+        """
+        raise NotImplementedError
+
+    def forward(self,
+        xs: Array,
+        param_vec: Optional[Tensor] = None,
+    ):
         r"""Returns energy values of data samples.
 
         Args
         ----
         xs: (num_samples, num_vars)
             Data samples.
+        param_vec: (num_params,)
+            Parameters of the potential. Use `get_param_vec` if it is ``None``.
 
         Returns
         -------
@@ -29,12 +53,6 @@ class BasePotential(torch.nn.Module):
             Energy values of data samples.
 
         """
-        raise NotImplementedError
-
-    def get_param_vec(self):
-        raise NotImplementedError
-
-    def set_param_vec(self, param_vec):
         raise NotImplementedError
 
 
@@ -53,31 +71,36 @@ class BasicDiscetePotential(BasePotential):
         Args
         ----
         nvec:
-            Vector of counts of each categorical variable.
+            Vector of counts for each categorical variable.
 
         """
         super(BasicDiscetePotential, self).__init__()
         self.nvec = nvec
-        self.embed = torch.nn.Embedding(np.prod(self.nvec), 1)
-
-    def forward(self, xs: Array):
-        xs = np.ravel_multi_index(xs.T, self.nvec)
-        xs = torch.tensor(xs, device=self.embed.weight.device, dtype=torch.long)
-        logits = self.embed(xs).squeeze(-1)
-        return logits
+        self.num_vals = np.prod(self.nvec)
+        self.param_vec = torch.nn.Parameter(torch.randn(self.num_vals))
 
     def get_param_vec(self):
-        param_vec = self.embed.weight.data[:, 0].numpy()
-        return param_vec
+        return self.param_vec.data
 
     def set_param_vec(self, param_vec):
-        self.embed.weight.data[:, 0] = torch.tensor(param_vec).to(self.embed.weight)
+        self.param_vec.data = param_vec
 
-    def set_prob(self,
+    def forward(self,
+        xs: Array,
+        param_vec: Optional[Tensor] = None,
+    ):
+        if param_vec is None:
+            param_vec = self.get_param_vec()
+        xs = np.ravel_multi_index(xs.T, self.nvec)
+        xs = torch.tensor(xs, device=param_vec.device, dtype=torch.long)
+        logits = embedding(xs, param_vec[:, None])[:, 0]
+        return logits
+
+    def set_from_prob(self,
         prob_dict: dict[tuple[int], float],
         eps: float = 1e-4,
     ):
-        r"""Sets parameters for a given probability distribution.
+        r"""Sets parameters from a given probability mass function.
 
         Args
         ----
@@ -88,18 +111,18 @@ class BasicDiscetePotential(BasePotential):
             The probability that all values not in `prob_dict` account for.
 
         """
-        self.embed.weight.data = torch.ones_like(self.embed.weight.data)
-        n_small = np.prod(self.nvec)-len(prob_dict)
+        param_vec = torch.ones(self.num_vals, device=self.param_vec.device)
+        n_small = self.num_vals-len(prob_dict)
         if n_small>0:
-            self.embed.weight.data *= np.log(eps/n_small) # initiate probabilities with small values
+            param_vec *= np.log(eps/n_small) # initiate probabilities with small values
         else:
             eps = 0 # all probabilities are specified
         z = sum(prob_dict.values())
         for x, p in prob_dict.items():
-            assert p>eps
             idx = np.ravel_multi_index(x, self.nvec)
-            self.embed.weight.data[idx] = np.log(p/z*(1-eps))
-        self.embed.weight.data -= self.embed.weight.data.mean() # shift baseline
+            param_vec[idx] = np.log(p/z*(1-eps))
+        param_vec -= param_vec.mean()
+        self.set_param_vec(param_vec)
 
 
 class BasicContinuousPotential(BasePotential):
@@ -118,12 +141,9 @@ class BasicContinuousPotential(BasePotential):
         super(BasicContinuousPotential, self).__init__()
         self.num_vars = num_vars
 
-    def forward(self, xs: Array):
-        raise NotImplementedError
 
-
-class EnergyBasedDistribution(torch.nn.Module):
-    r"""Energy based distributions.
+class BaseDistribution(torch.nn.Module):
+    r"""Base class for energy based distributions.
 
     The probability (density) for each sample is characterized by a scalar of
     energy, i.e. p(x) is proportional to exp(energy(x)). The energy function is
@@ -136,13 +156,13 @@ class EnergyBasedDistribution(torch.nn.Module):
         idxs: Optional[list[list[int]]] = None,
         phis: Optional[list[Optional[BasePotential]]] = None,
         *,
-        rng: Union[RandomGenerator, int, None] = None,
+        rng: Union[RandGen, int, None] = None,
     ):
         r"""
         Args
         ----
         space:
-            Variable space. Currently only supports MultiDiscrete and Box with
+            Variable space. Currently only supports MultiDiscrete or Box with
             dimension 1.
         idxs:
             Variable indices for each potential. When `idxs` is ``None``, it
@@ -154,13 +174,15 @@ class EnergyBasedDistribution(torch.nn.Module):
             Random number generator, designed for reproducibility.
 
         """
-        super(EnergyBasedDistribution, self).__init__()
+        super(BaseDistribution, self).__init__()
+
         if isinstance(space, MultiDiscrete):
             self.num_vars = len(space.nvec)
         if isinstance(space, Box):
             assert len(space.shape)==1, "Only supports 1D box space."
             self.num_vars = space.shape[0]
         self.space = space
+
         if idxs is None:
             assert phis is None, "Variable indices of potentials are not specified."
             self.idxs = [list(range(self.num_vars))] # one global potential by default
@@ -168,6 +190,7 @@ class EnergyBasedDistribution(torch.nn.Module):
             for idx in idxs:
                 assert set(idx).issubset(range(self.num_vars)), f"Variable indices {idx} is invalid."
             self.idxs = idxs
+
         if phis is None:
             phis = [None]*len(self.idxs)
         else:
@@ -184,9 +207,37 @@ class EnergyBasedDistribution(torch.nn.Module):
                 self.phis.append(phi)
             self.num_params.append(len(self.phis[-1].get_param_vec()))
 
-        self.rng = rng if isinstance(rng, RandomGenerator) else np.random.default_rng(rng)
+        self.rng = rng if isinstance(rng, RandGen) else np.random.default_rng(rng)
 
-    def energy(self, xs):
+    def get_param_vec(self):
+        r"""Returns the concatenated parameter vector.
+
+        Returns
+        -------
+        param_vec: (num_params,) Tensor
+
+        """
+        param_vec = torch.cat([phi.get_param_vec() for phi in self.phis])
+        return param_vec
+
+    def set_param_vec(self, param_vec):
+        r"""Sets the concatenated parameter vector.
+
+        Args
+        ----
+        param_vec: (num_params,)
+            Concatenated parameters for all potentials.
+
+        """
+        c_p = 0
+        for phi, n_p in zip(self.phis, self.num_params):
+            phi.set_param_vec(param_vec[c_p:c_p+n_p])
+            c_p += n_p
+
+    def energy(self,
+        xs: Array,
+        param_vec: Optional[Tensor] = None,
+    ):
         r"""Returns energy values of data samples.
 
         Energy values from each local poentials are summed up.
@@ -195,6 +246,8 @@ class EnergyBasedDistribution(torch.nn.Module):
         ----
         xs: (num_samples, num_vars)
             Data samples.
+        param_vec: (num_params,)
+            Concatenated parameters for all potentials.
 
         Returns
         -------
@@ -202,13 +255,21 @@ class EnergyBasedDistribution(torch.nn.Module):
             Energy values of data samples.
 
         """
-        e = 0
-        for idx, phi in zip(self.idxs, self.phis):
-            e += phi(xs[:, idx])
+        e, c_p = 0, 0
+        for idx, phi, n_p in zip(self.idxs, self.phis, self.num_params):
+            e += phi(xs[:, idx], None if param_vec is None else param_vec[c_p:c_p+n_p])
+            c_p += n_p
         return e
 
-    def logpartition(self):
+    def logpartition(self,
+        param_vec: Optional[Tensor] = None,
+    ):
         r"""Returns log partition function.
+
+        Args
+        ----
+        param_vec: (num_params,)
+            Concatenated parameters for all potentials.
 
         Returns
         -------
@@ -219,13 +280,18 @@ class EnergyBasedDistribution(torch.nn.Module):
         """
         raise NotImplementedError
 
-    def loglikelihood(self, xs: Array):
+    def loglikelihood(self,
+        xs: Array,
+        param_vec: Optional[Tensor] = None,
+    ):
         r"""Returns log likelihood of data samples.
 
         Args
         ----
         xs: (num_samples, num_vars)
             Data samples.
+        param_vec: (num_params,)
+            Concatenated parameters for all potentials.
 
         Returns
         -------
@@ -233,7 +299,7 @@ class EnergyBasedDistribution(torch.nn.Module):
             Log likelihood of data samples.
 
         """
-        logp = self.energy(xs).mean(dim=0)-self.logpartition()
+        logp = self.energy(xs, param_vec)-self.logpartition(param_vec)
         return logp
 
     def sample(self,
@@ -253,21 +319,11 @@ class EnergyBasedDistribution(torch.nn.Module):
             Samples drawn from the distribution.
 
         """
-        # TODO, Gibbs sampling
+        # TODO Gibbs sampling
         raise NotImplementedError
 
-    def get_param_vec(self):
-        param_vec = np.concatenate([phi.get_param_vec() for phi in self.phis])
-        return param_vec
 
-    def set_param_vec(self, param_vec):
-        idx = 0
-        for i, phi in enumerate(self.phis):
-            phi.set_param_vec(param_vec[idx:(idx+self.num_params[i])])
-            idx += self.num_params[i]
-
-
-class DiscreteDistribution(EnergyBasedDistribution):
+class DiscreteDistribution(BaseDistribution):
     r"""Distribution for discrete variables."""
 
     def __init__(self,
@@ -283,6 +339,9 @@ class DiscreteDistribution(EnergyBasedDistribution):
         """
         super(DiscreteDistribution, self).__init__(space, **kwargs)
 
+    def __repr__(self):
+        return 'Discrete distribution on space {}'.format(self.space.nvec)
+
     def _all_xs(self):
         r"""Returns all possible variable values.
 
@@ -297,15 +356,18 @@ class DiscreteDistribution(EnergyBasedDistribution):
         xs = np.stack(np.unravel_index(xs, self.space.nvec)).T
         return xs
 
-    def logpartition(self):
+    def logpartition(self,
+        param_vec: Optional[Tensor] = None,
+    ):
         r"""Returns log partition function.
 
         Calculate `logz = log(sum(exp(energy(x))))` directly over all possible
         variable values.
 
         """
+        # TODO more efficient implementation by using phis structure
         xs = self._all_xs()
-        logz = torch.logsumexp(self.energy(xs), dim=0)
+        logz = torch.logsumexp(self.energy(xs, param_vec), dim=0)
         return logz
 
     def sample(self,
@@ -320,64 +382,3 @@ class DiscreteDistribution(EnergyBasedDistribution):
         )
         xs = np.stack(np.unravel_index(xs, self.space.nvec)).T
         return xs
-
-
-class IndependentDiscreteDistribution(DiscreteDistribution):
-    r"""Independent discrete distribution.
-
-    Each individual variable is associated with one potential.
-
-    """
-
-    def __init__(self,
-        space: MultiDiscrete,
-    ):
-        idxs = [[i] for i in range(len(space.nvec))]
-        super(IndependentDiscreteDistribution, self).__init__(space, idxs=idxs)
-
-    def __repr__(self):
-        p_strs = []
-        for phi in self.phis:
-            p = torch.nn.functional.softmax(phi.embed.weight.data, dim=0)
-            p_strs.append('['+', '.join(['{:.2f}'.format(p[i].item()) for i in range(len(p))])+']')
-        return '\n'.join(p_strs)
-
-    def set_probs(self,
-        prob_dicts: list[dict[tuple[int], float]],
-        eps: float = 1e-4,
-    ):
-        r"""Sets probabilities for each potential.
-
-        prob_dicts:
-            A list of length `self.num_vars`, containing the probability values
-            of each variable.
-        eps:
-            A small positive number to deal with zero probability.
-
-        """
-        for phi, prob_dict in zip(self.phis, prob_dicts):
-            phi.set_prob(prob_dict, eps)
-
-    def assign_delta(self,
-        x: Array,
-        eps: float = 1e-4,
-    ):
-        r"""Sets the distribution as a delta function on given value.
-
-        Args
-        ----
-        x:
-            Data sample that has a probability of 1.
-        eps:
-            A small positive number to deal with zero probability.
-
-        """
-        assert len(x)==self.num_vars
-        prob_dicts = []
-        for i in range(self.num_vars):
-            prob_dicts.append({(x[i],): 1.})
-        self.set_probs(prob_dicts, eps/self.num_vars)
-
-    def sample(self, num_samples=None):
-        # TODO more efficient implementation
-        return super(IndependentDiscreteDistribution, self).sample(num_samples)

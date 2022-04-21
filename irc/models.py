@@ -5,7 +5,7 @@ from typing import Optional, Type, Union
 from jarvis.utils import progress_str, time_str
 
 from .distributions import BaseDistribution, DiscreteDistribution
-from .utils import MultiDiscrete, Box, VarSpace, Array, RandomGenerator
+from .utils import MultiDiscrete, Box, VarSpace, Array, RandGen
 
 
 class BaseParamNet(torch.nn.Module):
@@ -90,8 +90,7 @@ class CompleteEmbedParamNet(BaseParamNet):
         out = torch.tensor(xs, device=device, dtype=torch.long)
         for layer in self.layers:
             out = layer(out)
-        param_vecs = out
-        return param_vecs
+        return out
 
 
 class BaseModel:
@@ -110,7 +109,7 @@ class BaseModel:
         dist_kwargs: Optional[dict] = None,
         param_net_class: Optional[Type[BaseParamNet]] = None,
         param_net_kwargs: Optional[dict] = None,
-        rng: Union[RandomGenerator, int, None] = None,
+        rng: Union[RandGen, int, None] = None,
     ):
         r"""
         Args
@@ -140,7 +139,7 @@ class BaseModel:
             space=x_space, n_out=len(self.dist.get_param_vec()), **(param_net_kwargs or {}),
             )
 
-        self.rng = rng if isinstance(rng, RandomGenerator) else np.random.default_rng(rng)
+        self.rng = rng if isinstance(rng, RandGen) else np.random.default_rng(rng)
 
     def estimate(self,
         xs: Array,
@@ -185,7 +184,7 @@ class BaseModel:
         tic = time.time()
         for b_idx in range(1, num_batches+1):
             loss = 0.
-            for s_idx in self.rng.choice(range(num_samples), batch_size):
+            for s_idx in self.rng.choice(num_samples, batch_size):
                 # TODO more efficient implementation by grouping identical xs
                 x, y = xs[s_idx], ys[s_idx]
                 loss += -self.dist.loglikelihood(y[None], self.param_net(x[None])[0])[0]
