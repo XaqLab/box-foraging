@@ -1,105 +1,12 @@
-import time
-import gym
 import numpy as np
-from gym.spaces import Box
-from .estimators import MaximumLikelihoodEstimator
+import gym
 
-from typing import Optional
-from gym.spaces import Discrete
-from .distributions import VarSpace
-from .distributions import EnergyBasedDistribution as Distribution
-RandomGenerator = np.random.Generator
+from typing import Optional, Type, Union
+from gym.spaces import MultiDiscrete, Box
+from jarvis.utils import flatten, nest
 
-
-class TransitModel:
-    r"""Base class for transition model."""
-
-    def __init__(self,
-        state_space: VarSpace,
-        action_space: Discrete,
-    ):
-        self.state_space = state_space
-        self.action_space = action_space
-
-    def __call__(self, state, action):
-        r"""Forward pass of transition model.
-
-        Args
-        ----
-        state:
-            Environment state s_t.
-        action:
-            Agent action a_t.
-
-        Returns
-        -------
-        state_dist: Distribution
-            Conditional probability of next state, p(s_tp1|s_t, a_t).
-
-        """
-        raise NotImplementedError
-
-    def reward_func(self, state, action, next_state):
-        r"""Returns reward value.
-
-        Args
-        ----
-        state:
-            Environment state s_t.
-        action:
-            Agent action a_t.
-        next_state:
-            Environment state s_tp1.
-
-        Returns
-        reward: float
-            Reward r_t.
-
-        """
-        raise NotImplementedError
-
-    def done_func(self, state):
-        r"""Returns termination status.
-
-        Args
-        ----
-        state:
-            Environment state s_t.
-
-        Returns
-        -------
-        done: bool
-            ``True`` if `state` is a termination state.
-
-        """
-        done = False # non-episodic by default
-        return done
-
-
-class ObsModel:
-    r"""Base class for observation model."""
-
-    def __init__(self,
-        obs_space,
-    ):
-        self.obs_space = obs_space
-
-    def __call__(self, state):
-        r"""Forward pass of observation model.
-
-        Args
-        ----
-        state:
-            State sample s_t.
-
-        Returns
-        -------
-        obs_dist: Distribution
-            Conditional probability p(o_t|s_t).
-
-        """
-        raise NotImplementedError
-
+from .distributions import BaseDistribution, DiscreteDistribution
+from .utils import Tensor, RandGen, SB3Algo
 
 class BeliefMDPEnvironment(gym.Env):
     r"""Base class for belief MDP environment.
@@ -115,135 +22,147 @@ class BeliefMDPEnvironment(gym.Env):
     """
 
     def __init__(self,
-        state_space: VarSpace,
-        action_space: Discrete,
-        obs_space: VarSpace,
-        belief: Distribution,
-        transit_model: Optional[TransitModel] = None,
-        obs_model: Optional[ObsModel] = None,
+        env: gym.Env,
+        belief_class: Optional[Type[BaseDistribution]] = None,
+        belief_kwargs: Optional[dict] = None,
+        b_param_init: Optional[Tensor] = None,
+        p_o_s: Optional[BaseDistribution] = None,
         est_spec: Optional[dict] = None,
+        rng: Union[RandGen, int, None] = None,
     ):
         r"""
         Args
         ----
-        state_space, action_space, obs_space:
-            State, action and observation space of the environment.
-        belief:
-            Belief of state.
-        transit_model:
-            The transition model that returns probability distribution
-            p(s_tp1|s_t, a_t).
-        obs_model:
-            The observation model that returns probability distribution
-            p(o_t|s_t).
-        est_spec:
-            Specifications for estimating transition model, observation model or
-            the belief update function.
 
         """
-        super(BeliefMDPEnvironment, self).__init__()
-        self.state_space = state_space
-        self.action_space = action_space
-        self.obs_space = obs_space
-        self.belief = belief
+        self.env = env
+        self.action_space = self.env.action_space
 
-        # set up belief space as the 'observation_space' for gym.Env
-        b_param = self.belief.get_param_vec()
-        self.observation_space = Box(-np.inf, np.inf, shape=b_param.shape)
+        if belief_class is None:
+            if isinstance(self.env.state_space, MultiDiscrete):
+                belief_class = DiscreteDistribution
+            if isinstance(self.env.state_space, Box):
+                raise NotImplementedError
+        self.belief = belief_class(self.env.state_space, **(belief_kwargs or {}))
+        self.belief_space = Box(-np.inf, np.inf, shape=self.belief.get_param_vec().shape)
+        self.observation_space = self.belief_space
 
-        self.transit_model = transit_model
-        self.obs_model = obs_model
-        self.est_spec = self._get_est_spec(est_spec or {})
+        self.est_spec = self._get_est_spec(**(est_spec or {}))
+        if b_param_init is None:
+            self.b_param_init = self.estimate_state_prior()
+        else:
+            assert b_param_init.shape==self.belief.get_param_vec().shape
+        self.p_o_s = self.estimate_obs_conditional() if p_o_s is None else p_o_s
+
+        self.rng = rng if isinstance(rng, RandGen) else np.random.default_rng(rng)
 
     @staticmethod
-    def _get_est_spec(est_spec):
-        r"""Returns estimation specification by filling default values."""
-        _est_spec = {
-            'transit': {
-                # TODO set default spec
+    def _get_est_spec(**kwargs):
+        r"""Returns full estimation specification."""
+        est_spec = flatten({
+            'state_prior': {
+                'num_samples': 1000,
+                'optim_kwargs': {
+                    'batch_size': 32, 'num_epochs': 10,
+                    'lr': 0.01, 'momentum': 0.9, 'weight_decay': 1e-4,
+                    'verbose': 1,
+                },
             },
-            'obs': {
-                # TODO set default spec
+            'obs_conditional': {
+                'dist_class': None, 'dist_kwargs': None,
+                'num_samples': 10000,
+                'optim_kwargs': {
+                    'batch_size': 32, 'num_epochs': 10,
+                    'lr': 0.01, 'momentum': 0.9, 'weight_decay': 1e-4,
+                    'verbose': 1,
+                },
             },
             'belief': {
-                'estimator': MaximumLikelihoodEstimator(),
-                'num_samples': 100, # number of state samples
-                'use_obs_model': True,
-                'kwargs': {'num_batches': 20, 'num_epochs': 5,},
-            },
-        }
-        for module_key in _est_spec:
-            if module_key in est_spec:
-                for key in _est_spec[module_key]:
-                    if key in est_spec[module_key]:
-                        _est_spec[module_key][key] = est_spec[module_key][key]
-        return _est_spec
+                'num_samples': 100,
+                'optim_kwargs': {
+                    'batch_size': 32, 'num_epochs': 20,
+                    'lr': 0.01, 'momentum': 0.9, 'weight_decay': 1e-4,
+                    'verbose': 0,
+                },
+            }
+        })
+        for key, val in flatten(kwargs).items():
+            if key in est_spec:
+                est_spec[key] = val
+        return nest(est_spec)
 
-    def get_state(self):
-        raise NotImplementedError
+    def estimate_state_prior(self):
+        r"""Estimates initial belief."""
+        # TODO consider change it to p(s|o)
+        # use env to collect initial states
+        _state_to_restore = self.env.get_state()
+        states = []
+        for _ in range(self.est_spec['state_prior']['num_samples']):
+            self.env.reset()
+            states.append(self.env.get_state())
+        self.env.set_state(_state_to_restore)
+        # estimate the initial belief
+        if self.est_spec['state_prior']['optim_kwargs']['verbose']>0:
+            print("estimating prior distribution p(s)")
+        self.belief.estimate(
+            xs=np.array(states), **self.est_spec['state_prior']['optim_kwargs'],
+        )
+        return self.belief.get_param_vec().clone()
 
-    def set_state(self, state):
-        raise NotImplementedError
+    def estimate_obs_conditional(self):
+        r"""Estimates conditional distribution of observation."""
+        # use env to collect state/observation pairs
+        _state_to_restore = self.env.get_state()
+        obss, states = [], []
+        for _ in range(self.est_spec['obs_conditional']['num_samples']):
+            # TODO specify state and action distributions
+            state = self.env.state_space.sample()
+            self.env.set_state(state)
+            action = self.env.action_space.sample()
+            obs, *_ = self.env.step(action)
+            obss.append(obs)
+            states.append(self.env.get_state())
+        self.env.set_state(_state_to_restore)
+        # estimate the conditional distribution
+        if self.est_spec['obs_conditional']['optim_kwargs']['verbose']>0:
+            print("estimating conditional distribution p(o|s)")
+        if self.est_spec['obs_conditional']['dist_class'] is None:
+            if isinstance(self.env.observation_space, MultiDiscrete):
+                dist_class = DiscreteDistribution
+            if isinstance(self.env.observation_space, Box):
+                raise NotImplemented
+        else:
+            dist_class = self.est_spec['obs_conditional']['dist_class']
+        dist = dist_class(
+            x_space=self.env.observation_space, y_space=self.env.state_space,
+            **(self.est_spec['obs_conditional']['dist_kwargs'] or {}),
+        )
+        dist.estimate(
+            np.array(obss), np.array(states),
+            **self.est_spec['obs_conditional']['optim_kwargs'],
+            )
+        return dist
 
-    def transit_step(self, state, action):
-        r"""Simulates one step of transition.
+    def reset(self):
+        self.env.reset()
+        self.belief.set_param_vec(self.b_param_init)
+        # TODO append env_param optionally
+        return self.b_param_init.cpu().numpy()
 
-        The default method calls `transition_model` and samples the new state
-        from the conditional distribution p(s_tp1|s_t, a_t). The immediate
-        reward and termination status is determiend by the sampled next state.
-
-        This method can be overrode by child class.
-
-        """
-        state_dist = self.transit_model(state, action)
-        next_state = state_dist.sample()
-        reward = self.transit_model.reward_func(state, action, next_state)
-        done = self.transit_model.done_func(next_state)
-        return next_state, reward, done
-
-    def obs_step(self, state):
-        r"""Simulates one step of observation.
-
-        The default method calls `obs_model` and samples the observation from
-        the conditional distribution p(o_t|s_t).
-
-        This method can be overrode by child class.
-
-        """
-        obs_dist = self.obs_model(state)
-        obs = obs_dist.sample()
-        return obs
-
-    def init_belief(self, obs):
-        r"""Initializes belief.
-
-        The default method uses `obs_model` to estimate a posterior distribution
-        p(s_0|o_0), and sets it as the intial belief.
-
-        This method can be overrode by child class.
-
-        """
-        spec = self.est_spec['belief']
-
-        states, weights = [], []
-        for _ in range(spec['num_samples']):
-            state = self.state_space.sample()
-            states.append(state)
-            obs_dist = self.obs_model(state)
-            weights.append(np.exp(obs_dist.loglikelihood(obs[None]).item()))
-        spec['estimator'].estimate(
-                self.belief, np.stack(states), np.array(weights), **spec['kwargs'],
-                )
+    def step(self, action):
+        obs, reward, done, info = self.env.step(action)
+        info.update({
+            'obs': obs, 'state': self.env.get_state(),
+        })
+        self.update_belief(action, obs)
+        return self.belief.get_param_vec().cpu().numpy(), reward, done, info
 
     def update_belief(self, action, obs):
-        r"""Updates belief based on action and observation.
+        r"""Updates belief.
 
-        The default method samples next states from p(s_tp1|s_t, a_t), and
-        assigns weight p(o_tp1|s_tp1) to each sample. New belief is estimated
-        from these samples using specified estimator, keeping the factorization
-        structure unchanged.
-
-        This method can be overrode by child class.
+        Draw s_t samples from current belief, use env to get s_tp1 samples.
+        These samples are weighted according to estimated conditional
+        distribution p(o|s), and used to estimate the new belief.
 
         Args
         ----
@@ -252,95 +171,65 @@ class BeliefMDPEnvironment(gym.Env):
         obs:
             Observation at time t+1.
 
-        Returns
-        -------
-        log: dict
-            Auxiliary information about the update process.
-
         """
-        spec = self.est_spec['belief']
-        log = {}
+        _state_to_restore = self.env.get_state()
+        states, weights = [], []
+        for _ in range(self.est_spec['belief']['num_samples']):
+            state = self.belief.sample()
+            self.env.set_state(state)
+            self.env.step(action)
+            next_state = self.env.get_state()
+            states.append(next_state)
+            weights.append(np.exp(self.p_o_s.loglikelihood(
+                np.array(obs)[None], np.array(next_state)[None]).item()))
+        self.env.set_state(_state_to_restore)
+        self.belief.estimate(
+            xs=np.array(states), ws=np.array(weights),
+            **self.est_spec['belief']['optim_kwargs'],
+        )
 
-        tic = time.time()
-        s_t = self.belief.sample(num_samples=spec['num_samples'])
-        if spec['use_obs_model']:
-            s_tp1, weights = [], []
-            for _s_t in s_t:
-                _s_tp1, _, _ = self.transit_step(_s_t, action)
-                s_tp1.append(_s_tp1)
-                _o_dist = self.obs_model(_s_tp1)
-                weights.append(np.exp(_o_dist.loglikelihood(obs[None]).item()))
-            spec['estimator'].estimate(
-                self.belief, np.stack(s_tp1), np.array(weights), **spec['kwargs'],
-                )
-        else: # TODO to remove the simulator method
-            s_tp1 = []
-            for _s_t in s_t:
-                _s_tp1, _, _ = self.transit_step(_s_t, action)
-                _o_tp1 = self.obs_step(_s_tp1)
-                if np.all(_o_tp1==obs):
-                    s_tp1.append(_s_tp1)
-            spec['estimator'].estimate(
-                self.belief, np.stack(s_tp1), **spec['kwargs'],
-            )
-            log['num_valid_samples'] = len(s_tp1)
-        toc = time.time()
-        log['t_elapse'] = toc-tic
-        return log
-
-    def step(self, action):
-        r"""Simulates one step of environment.
-
-        This method can be overrode by the child class. Aside from being
-        compatible with gym.Env requirements, the `info` dictionary must
-        contains the new environment state at key 'state' and observation at key
-        'obs'.
+    def run_one_trial(self,
+        algo: Optional[SB3Algo] = None,
+        num_steps: int = 40,
+    ):
+        r"""Runs one trial.
 
         Args
         ----
-        action:
-            Action at time t. It is supposed to be decided based on the belief
-            at time t.
+        algo:
+            An RL algorithm compatible with stable-baselines3.
+        num_steps:
+            Number of time steps of one trial.
 
         Returns
         -------
-        b_param: Array
-            Parameter vector of the belief at time t+1, treated as the input for
-            reinforcement learning algorithm.
-        reward: float
-            Reward at time t.
-        done: bool
-            Termination signal.
-        info: dict
-            The step information containing the state and observation at t+1.
+        trial: dict
+            A dictionary containing actions, rewards, states, observations and
+            beliefs in one trial.
 
         """
-        state = self.get_state()
-        state, reward, done = self.transit_step(state, action)
-        self.set_state(state)
-        obs = self.obs_step(state)
-        log = self.update_belief(action, obs)
-        b_param = self.belief.get_param_vec()
-        info = {'state': state, 'obs': obs, 'log': log}
-        return b_param, reward, done, info
+        if algo is not None:
+            algo.policy.set_training_mode(False)
+        actions, rewards, states, obss, beliefs = [], [], [], [], []
+        b_param = self.reset()
+        for _ in range(num_steps): # TODO deal with episodic environment
+            if algo is None:
+                action = self.action_space.sample()
+            else:
+                action, _ = algo.predict(b_param)
+            actions.append(action)
 
-    def reset(self, obs):
-        r"""Resets environment.
-
-        Child class needs to override this method as `reset()`, the `obs`
-        returned by normal reset method will be passed to the parent method.
-
-        Args
-        ----
-        obs:
-            Observation returned by a normal gym environment.
-
-        Returns
-        -------
-        b_param:
-            Parameter vector of the initial belief.
-
-        """
-        self.init_belief(obs)
-        b_param = self.belief.get_param_vec()
-        return b_param
+            belief, reward, _, info = self.step(action)
+            rewards.append(reward)
+            states.append(info['state'])
+            obss.append(info['obs'])
+            beliefs.append(belief)
+        trial = {
+            'num_steps': num_steps,
+            'actions': np.array(actions),
+            'rewards': np.array(rewards),
+            'states': np.array(states),
+            'obss': np.array(obss),
+            'beliefs': np.array(beliefs),
+        }
+        return trial
