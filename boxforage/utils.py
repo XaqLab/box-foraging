@@ -1,6 +1,74 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 
+def plot_single_box_trial(b_env, trial, figsize=(10, 1.5)):
+    num_steps = trial['num_steps']
+    actions = trial['actions']
+    rewards = trial['rewards']
+    states = trial['states']
+    obss = trial['obss']
+
+    _b_param_to_restore = b_env.belief.get_param_vec()
+    device = _b_param_to_restore.device
+    state_true, probs = (1,), []
+    for b_param in trial['beliefs']:
+        b_env.belief.set_param_vec(torch.tensor(b_param, device=device))
+        with torch.no_grad():
+            probs.append(np.exp(b_env.belief.loglikelihood(np.array(state_true)[None]).item()))
+    probs = np.array(probs)
+    b_env.belief.set_param_vec(_b_param_to_restore)
+
+    fig_w, fig_h = figsize
+    aspect = num_steps*fig_h/fig_w*1.5
+    figs = []
+
+    fig, ax = plt.subplots(figsize=figsize)
+    h = ax.imshow(
+        states.T, aspect=aspect, extent=[0.5, num_steps+0.5, -0.5, 0.5],
+        vmin=0, vmax=1, origin='lower', cmap='coolwarm',
+        )
+    cbar = plt.colorbar(h, label='Has food')
+    cbar.set_ticks([0, 1])
+    cbar.set_ticklabels(['F', 'T'])
+    ax.set_xlim([-0.5, num_steps+0.5])
+    ax.set_xticks([0, num_steps])
+    ax.set_yticks([])
+    ax.set_xlabel('Time')
+    figs.append(fig)
+
+    num_shades = b_env.env.env_spec['box']['num_shades']
+    fig, ax = plt.subplots(figsize=figsize)
+    h = ax.imshow(
+        obss.T, aspect=aspect, extent=[0.5, num_steps+0.5, -0.5, 0.5],
+        vmin=0, vmax=num_shades, origin='lower', cmap='coolwarm',
+        )
+    cbar = plt.colorbar(h, label='Color cue')
+    cbar.set_ticks([0, num_shades])
+    idxs = (actions==1)&(rewards>0)
+    h_true = ax.scatter(np.arange(num_steps)[idxs], np.zeros(sum(idxs)), color='magenta', marker='o', s=50)
+    idxs = (actions==1)&(rewards<0)
+    h_false = ax.scatter(np.arange(num_steps)[idxs], np.zeros(sum(idxs)), color='salmon', marker='x', s=50)
+    ax.legend([h_true, h_false], ['Has food', 'No food'], loc='upper left', fontsize=12)
+    ax.set_xlim([-0.5, num_steps+0.5])
+    ax.set_xticks([0, num_steps])
+    ax.set_yticks([])
+    ax.set_xlabel('Time')
+    figs.append(fig)
+
+    fig, ax = plt.subplots(figsize=figsize)
+    h = ax.imshow(
+        probs[None], aspect=aspect, extent=[0.5, num_steps+0.5, -0.5, 0.5],
+        vmin=0, vmax=1, origin='lower', cmap='coolwarm',
+        )
+    cbar = plt.colorbar(h, label='Belief')
+    cbar.set_ticks([0, 1])
+    ax.set_xlim([-0.5, num_steps+0.5])
+    ax.set_xticks([0, num_steps])
+    ax.set_yticks([])
+    ax.set_xlabel('Time')
+    figs.append(fig)
+    return figs
 
 def get_spec(name, **kwargs):
     r"""Returns environment specifications.
