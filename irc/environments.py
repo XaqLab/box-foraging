@@ -149,10 +149,24 @@ class BeliefMDPEnvironment(gym.Env):
         # TODO append env_param optionally
         return self.b_param_init.cpu().numpy()
 
-    def step(self, action):
-        obs, reward, done, info = self.env.step(action)
+    def step(self, action, env=None):
+        r"""Runs one step.
+
+        Args
+        ----
+        action:
+            Action at time t.
+        env:
+            The actual environment to interact with. It can differ from the
+            internal model `self.env`, though the latter is always used for
+            belief update.
+
+        """
+        if env is None:
+            env = self.env
+        obs, reward, done, info = env.step(action)
         info.update({
-            'obs': obs, 'state': self.env.get_state(),
+            'obs': obs, 'state': env.get_state(),
         })
         self.update_belief(action, obs)
         return self.belief.get_param_vec().cpu().numpy(), reward, done, info
@@ -183,13 +197,15 @@ class BeliefMDPEnvironment(gym.Env):
             weights.append(np.exp(self.p_o_s.loglikelihood(
                 np.array(obs)[None], np.array(next_state)[None]).item()))
         self.env.set_state(_state_to_restore)
-        self.belief.estimate(
+        self.belief.estimate( # TODO add running statistics for inspection
             xs=np.array(states), ws=np.array(weights),
             **self.est_spec['belief']['optim_kwargs'],
         )
 
     def run_one_trial(self,
+        *,
         algo: Optional[SB3Algo] = None,
+        env: Optional[gym.Env] = None,
         num_steps: int = 40,
     ):
         r"""Runs one trial.
@@ -198,6 +214,8 @@ class BeliefMDPEnvironment(gym.Env):
         ----
         algo:
             An RL algorithm compatible with stable-baselines3.
+        env:
+            The actual environment to interact with.
         num_steps:
             Number of time steps of one trial.
 
@@ -219,7 +237,7 @@ class BeliefMDPEnvironment(gym.Env):
                 action, _ = algo.predict(b_param)
             actions.append(action)
 
-            belief, reward, _, info = self.step(action)
+            belief, reward, _, info = self.step(action, env)
             rewards.append(reward)
             states.append(info['state'])
             obss.append(info['obs'])
