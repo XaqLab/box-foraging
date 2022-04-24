@@ -73,7 +73,7 @@ class SingleBoxForaging(gym.Env):
         self.env_spec['reward']['food'] = env_param[2]
 
     def get_state(self):
-        r"""Returns environemtn state."""
+        r"""Returns environment state."""
         state = (self.has_food,)
         return state
 
@@ -83,8 +83,7 @@ class SingleBoxForaging(gym.Env):
 
     def reset(self):
         self.has_food = 0
-        obs = self.observe_step()
-        return obs
+        return self.observe_step()
 
     def step(self, action):
         reward, done = self.transition_step(action)
