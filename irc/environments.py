@@ -145,8 +145,10 @@ class BeliefMDPEnvironment(gym.Env):
             )
         return dist
 
-    def reset(self):
-        self.env.reset()
+    def reset(self, env=None):
+        if env is None:
+            env = self.env
+        env.reset()
         self.belief.set_param_vec(self.b_param_init)
         # TODO append env_param optionally
         return self.b_param_init.cpu().numpy()
@@ -204,7 +206,7 @@ class BeliefMDPEnvironment(gym.Env):
             **self.est_spec['belief']['optim_kwargs'],
         )
 
-    def learn_optimal(self,
+    def train_agent(self,
         algo_class: Optional[Type[SB3Algo]] = None,
         algo_kwargs: Optional[dict] = None,
         policy_class: Optional[Type[SB3Policy]] = None,
