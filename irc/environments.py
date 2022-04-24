@@ -3,10 +3,12 @@ import gym
 
 from typing import Optional, Type, Union
 from gym.spaces import MultiDiscrete, Box
+from stable_baselines3.ppo import PPO
+from stable_baselines3.common.policies import ActorCriticPolicy
 from jarvis.utils import flatten, nest
 
 from .distributions import BaseDistribution, DiscreteDistribution
-from .utils import Tensor, RandGen, SB3Algo
+from .utils import Tensor, RandGen, SB3Algo, SB3Policy
 
 class BeliefMDPEnvironment(gym.Env):
     r"""Base class for belief MDP environment.
@@ -201,6 +203,33 @@ class BeliefMDPEnvironment(gym.Env):
             xs=np.array(states), ws=np.array(weights),
             **self.est_spec['belief']['optim_kwargs'],
         )
+
+    def learn_optimal(self,
+        algo_class: Optional[Type[SB3Algo]] = None,
+        algo_kwargs: Optional[dict] = None,
+        policy_class: Optional[Type[SB3Policy]] = None,
+        policy_kwargs: Optional[dict] = None,
+        learn_kwargs: Optional[dict] = None,
+        verbose: int = 1,
+    ):
+        if algo_class is None:
+            algo_class = PPO
+        if algo_kwargs is None:
+            algo_kwargs = {'n_steps': 128, 'batch_size': 32}
+        if policy_class is None:
+            policy_class = ActorCriticPolicy
+        if policy_kwargs is None:
+            policy_kwargs = {}
+        if learn_kwargs is None:
+            learn_kwargs = {'total_timesteps': 5120, 'log_interval': 10}
+
+        algo = algo_class(
+            policy=(policy_class or ActorCriticPolicy), env=self,
+            policy_kwargs=(policy_kwargs or {}),
+            verbose=verbose, **algo_kwargs,
+        )
+        algo.learn(**learn_kwargs)
+        return algo
 
     def run_one_trial(self,
         *,
