@@ -87,6 +87,13 @@ class SingleBoxForaging(gym.Env):
         return obs
 
     def step(self, action):
+        reward, done = self.transition_step(action)
+        obs = self.observe_step()
+        info = {}
+        return obs, reward, done, info
+
+    def transition_step(self, action):
+        r"""Runs one transition step."""
         reward, done = 0., False
         if action==0: # wait
             if self.has_food==0 and self.rng.random()<self.env_spec['box']['p_appear']:
@@ -96,12 +103,13 @@ class SingleBoxForaging(gym.Env):
             if self.has_food==1:
                 reward += self.env_spec['reward']['food']
                 self.has_food = 0
+        return reward, done
 
+    def observe_step(self):
+        r"""Runs one observe step."""
         color = self.rng.binomial(
             self.env_spec['box']['num_shades'],
             self.env_spec['box']['p_cue'] if self.has_food==1 else 1-self.env_spec['box']['p_cue'],
         )
         obs = (color,)
-
-        info = {}
-        return obs, reward, done, info
+        return obs
