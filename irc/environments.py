@@ -10,16 +10,13 @@ from jarvis.utils import flatten, nest
 from .distributions import BaseDistribution, DiscreteDistribution
 from .utils import Tensor, RandGen, GymEnv, SB3Policy, SB3Algo
 
-class BeliefMDPEnvironment(gym.Env):
-    r"""Base class for belief MDP environment.
+class BeliefModel(gym.Env):
+    r"""Base class for internal belief model.
 
     Agent makes decision based on the belief of environment states instead of
-    the direct observation. The update of belief is based on the internal
-    transition model and observation model of the agent, and will not be changed
-    by reinforcement learning algorithm.
-
-    If transition model, observation model or belief update function is not
-    provided, default methods of the class will estimate them from simulators.
+    the direct observation. The update of belief is based on the assumed
+    environment by the agent, and will not be changed by reinforcement learning
+    algorithm.
 
     """
 
@@ -35,6 +32,24 @@ class BeliefMDPEnvironment(gym.Env):
         r"""
         Args
         ----
+        env:
+            The assumed environment, with a few utility methods implemented,
+            such as `get_state`, `set_state` etc. Detailed requirements are
+            specified in 'README.md'.
+        belief_class, belief_kwargs:
+            Class and key-word arguments for belief.
+        b_param_init:
+            Initial parameters of belief. If not provided, will be estimated
+            using the assumed environment.
+        p_o_s:
+            Conditional distribution p(o|s) of observation given environment
+            state. If not provided, will be estimated using the assumed
+            environment.
+        est_spec:
+            Specifications for estimating state prior p(s), observation
+            conditional distribution p(o|s) and parameter of the new belief.
+        rng:
+            Random generator.
 
         """
         self.env = env
@@ -162,8 +177,8 @@ class BeliefMDPEnvironment(gym.Env):
             Action at time t.
         env:
             The actual environment to interact with. It can differ from the
-            internal model `self.env`, though the latter is always used for
-            belief update.
+            assumed environment `self.env`, though the latter is always used for
+            belief updating.
 
         """
         if env is None:
