@@ -8,7 +8,7 @@ from stable_baselines3.common.policies import ActorCriticPolicy
 from jarvis.utils import flatten, nest
 
 from .distributions import BaseDistribution, DiscreteDistribution
-from .utils import Tensor, RandGen, SB3Algo, SB3Policy
+from .utils import Tensor, RandGen, GymEnv, SB3Policy, SB3Algo
 
 class BeliefMDPEnvironment(gym.Env):
     r"""Base class for belief MDP environment.
@@ -24,7 +24,7 @@ class BeliefMDPEnvironment(gym.Env):
     """
 
     def __init__(self,
-        env: gym.Env,
+        env: GymEnv,
         belief_class: Optional[Type[BaseDistribution]] = None,
         belief_kwargs: Optional[dict] = None,
         b_param_init: Optional[Tensor] = None,
@@ -207,21 +207,21 @@ class BeliefMDPEnvironment(gym.Env):
         )
 
     def train_agent(self,
-        algo_class: Optional[Type[SB3Algo]] = None,
-        algo_kwargs: Optional[dict] = None,
         policy_class: Optional[Type[SB3Policy]] = None,
         policy_kwargs: Optional[dict] = None,
+        algo_class: Optional[Type[SB3Algo]] = None,
+        algo_kwargs: Optional[dict] = None,
         learn_kwargs: Optional[dict] = None,
         verbose: int = 1,
     ):
-        if algo_class is None:
-            algo_class = PPO
-        if algo_kwargs is None:
-            algo_kwargs = {'n_steps': 128, 'batch_size': 32}
         if policy_class is None:
             policy_class = ActorCriticPolicy
         if policy_kwargs is None:
             policy_kwargs = {}
+        if algo_class is None:
+            algo_class = PPO
+        if algo_kwargs is None:
+            algo_kwargs = {'n_steps': 128, 'batch_size': 32}
         if learn_kwargs is None:
             learn_kwargs = {'total_timesteps': 5120, 'log_interval': 10}
 
@@ -236,7 +236,7 @@ class BeliefMDPEnvironment(gym.Env):
     def run_one_trial(self,
         *,
         algo: Optional[SB3Algo] = None,
-        env: Optional[gym.Env] = None,
+        env: Optional[GymEnv] = None,
         num_steps: int = 40,
     ):
         r"""Runs one trial.
