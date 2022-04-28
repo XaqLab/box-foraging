@@ -33,7 +33,7 @@ class SingleBoxForaging(gym.Env):
             Random generator.
 
         """
-        self.env_spec = self._get_env_spec(**(env_spec or {}))
+        self.env_spec = self._full_env_spec(**(env_spec or {}))
         self.state_space = MultiDiscrete([2]) # box state
         self.action_space = Discrete(2) # wait and fetch
         self.observation_space = MultiDiscrete([self.env_spec['box']['num_shades']+1]) # color cue
@@ -42,8 +42,8 @@ class SingleBoxForaging(gym.Env):
         self.reset()
 
     @staticmethod
-    def _get_env_spec(**kwargs):
-        r"""Returns full environment specification."""
+    def _full_env_spec(**kwargs):
+        r"""Returns full environment specification by filling default values."""
         env_spec = flatten({
             'box': {
                 'num_shades': 3, 'p_appear': 0.2, 'p_cue': 0.8,
@@ -66,7 +66,7 @@ class SingleBoxForaging(gym.Env):
         )
         return env_param
 
-    def update_env_spec(self, env_param):
+    def set_env_param(self, env_param):
         r"""Updates environment with parameters."""
         self.env_spec['box']['p_appear'] = env_param[0]
         self.env_spec['box']['p_cue'] = env_param[1]
