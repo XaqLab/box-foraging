@@ -3,12 +3,10 @@ import gym
 
 from typing import Optional, Type, Union
 from gym.spaces import MultiDiscrete, Box
-from stable_baselines3.ppo import PPO
-from stable_baselines3.common.policies import ActorCriticPolicy
 from jarvis.utils import flatten, nest
 
 from .distributions import BaseDistribution, DiscreteDistribution
-from .utils import Tensor, RandGen, GymEnv, SB3Policy, SB3Algo
+from .utils import Tensor, RandGen, GymEnv
 
 class BeliefModel(gym.Env):
     r"""Base class for internal belief model.
@@ -97,9 +95,9 @@ class BeliefModel(gym.Env):
                 },
             },
             'belief': {
-                'num_samples': 100,
+                'num_samples': 20,
                 'optim_kwargs': {
-                    'batch_size': 32, 'num_epochs': 20,
+                    'batch_size': 16, 'num_epochs': 5,
                     'lr': 0.01, 'momentum': 0.9, 'weight_decay': 1e-4,
                     'verbose': 0,
                 },
@@ -164,7 +162,7 @@ class BeliefModel(gym.Env):
 
     def state_dict(self):
         state = {
-            'init_blief': self.b_param_init,
+            'init_belief': self.b_param_init,
             'p_o_s_state': self.p_o_s.state_dict(),
         }
         return state
