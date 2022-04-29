@@ -65,11 +65,13 @@ class BeliefModel(gym.Env):
         self.observation_space = self.belief_space
 
         self.est_spec = self._get_est_spec(**(est_spec or {}))
-        if b_param_init is None:
-            self.b_param_init = self.estimate_state_prior()
-        else:
+        self.b_param_init = b_param_init
+        if self.b_param_init is not None:
             assert b_param_init.shape==self.belief.get_param_vec().shape
-        self.p_o_s = self.estimate_obs_conditional() if p_o_s is None else p_o_s
+        self.p_o_s = p_o_s
+        if self.p_o_s is not None:
+            assert self.p_o_s.x_space==self.env.observation_space
+            assert self.p_o_s.y_space==self.env.state_space
 
         self.rng = rng if isinstance(rng, RandGen) else np.random.default_rng(rng)
 
@@ -164,6 +166,10 @@ class BeliefModel(gym.Env):
         if env is None:
             env = self.env
         env.reset()
+        if self.b_param_init is None:
+            self.estimate_state_prior()
+        if self.p_o_s is None:
+            self.estimate_obs_conditional()
         self.belief.set_param_vec(self.b_param_init)
         # TODO append env_param optionally
         return self.b_param_init.cpu().numpy()
@@ -220,80 +226,3 @@ class BeliefModel(gym.Env):
             xs=np.array(states), ws=np.array(weights),
             **self.est_spec['belief']['optim_kwargs'],
         )
-
-    def train_agent(self,
-        policy_class: Optional[Type[SB3Policy]] = None,
-        policy_kwargs: Optional[dict] = None,
-        algo_class: Optional[Type[SB3Algo]] = None,
-        algo_kwargs: Optional[dict] = None,
-        learn_kwargs: Optional[dict] = None,
-        verbose: int = 1,
-    ):
-        if policy_class is None:
-            policy_class = ActorCriticPolicy
-        if policy_kwargs is None:
-            policy_kwargs = {}
-        if algo_class is None:
-            algo_class = PPO
-        if algo_kwargs is None:
-            algo_kwargs = {'n_steps': 128, 'batch_size': 32}
-        if learn_kwargs is None:
-            learn_kwargs = {'total_timesteps': 5120, 'log_interval': 10}
-
-        algo = algo_class(
-            policy=(policy_class or ActorCriticPolicy), env=self,
-            policy_kwargs=(policy_kwargs or {}),
-            verbose=verbose, **algo_kwargs,
-        )
-        algo.learn(**learn_kwargs)
-        return algo
-
-    def run_one_trial(self,
-        *,
-        algo: Optional[SB3Algo] = None,
-        env: Optional[GymEnv] = None,
-        num_steps: int = 40,
-    ):
-        r"""Runs one trial.
-
-        Args
-        ----
-        algo:
-            An RL algorithm compatible with stable-baselines3.
-        env:
-            The actual environment to interact with.
-        num_steps:
-            Number of time steps of one trial.
-
-        Returns
-        -------
-        trial: dict
-            A dictionary containing actions, rewards, states, observations and
-            beliefs in one trial.
-
-        """
-        if algo is not None:
-            algo.policy.set_training_mode(False)
-        actions, rewards, states, obss, beliefs = [], [], [], [], []
-        b_param = self.reset()
-        for _ in range(num_steps): # TODO deal with episodic environment
-            if algo is None:
-                action = self.action_space.sample()
-            else:
-                action, _ = algo.predict(b_param)
-            actions.append(action)
-
-            belief, reward, _, info = self.step(action, env)
-            rewards.append(reward)
-            states.append(info['state'])
-            obss.append(info['obs'])
-            beliefs.append(belief)
-        trial = {
-            'num_steps': num_steps,
-            'actions': np.array(actions),
-            'rewards': np.array(rewards),
-            'states': np.array(states),
-            'obss': np.array(obss),
-            'beliefs': np.array(beliefs),
-        }
-        return trial
