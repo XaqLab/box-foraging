@@ -1,4 +1,5 @@
 FROM zheli21/pytorch:1.11.0-cp39-cuda113-2004 AS base
+RUN python -m pip install -U stable-baselines3
 
 FROM base as git-repos
 RUN mkdir /root/.ssh/
@@ -12,4 +13,4 @@ FROM base as final
 COPY --from=git-repos /jarvis /jarvis
 RUN pip install -e jarvis
 COPY --from=git-repos /box-foraging /box-foraging
-WORKDIR /resnet-cifar
+WORKDIR /box-foraging
