@@ -80,7 +80,7 @@ class BeliefModel(gym.Env):
         r"""Returns full estimation specification."""
         est_spec = flatten({
             'state_prior': {
-                'num_samples': 1000,
+                'num_samples': 500,
                 'optim_kwargs': {
                     'batch_size': 32, 'num_epochs': 10,
                     'lr': 0.01, 'momentum': 0.9, 'weight_decay': 1e-4,
@@ -89,7 +89,7 @@ class BeliefModel(gym.Env):
             },
             'obs_conditional': {
                 'dist_class': None, 'dist_kwargs': None,
-                'num_samples': 10000,
+                'num_samples': 1000,
                 'optim_kwargs': {
                     'batch_size': 32, 'num_epochs': 10,
                     'lr': 0.01, 'momentum': 0.9, 'weight_decay': 1e-4,
@@ -162,14 +162,25 @@ class BeliefModel(gym.Env):
             )
         return dist
 
+    def state_dict(self):
+        state = {
+            'init_blief': self.b_param_init,
+            'p_o_s_state': self.p_o_s.state_dict(),
+        }
+        return state
+
+    def load_state_dict(self, state):
+        self.b_param_init = state['init_belief']
+        self.p_o_s.load_state_dict(state['p_o_s_state'])
+
     def reset(self, env=None):
         if env is None:
             env = self.env
         env.reset()
         if self.b_param_init is None:
-            self.estimate_state_prior()
+            self.b_param_init = self.estimate_state_prior()
         if self.p_o_s is None:
-            self.estimate_obs_conditional()
+            self.p_o_s = self.estimate_obs_conditional()
         self.belief.set_param_vec(self.b_param_init)
         # TODO append env_param optionally
         return self.b_param_init.cpu().numpy()
