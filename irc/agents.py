@@ -7,7 +7,7 @@ from stable_baselines3.ppo import PPO
 from stable_baselines3.common.policies import ActorCriticPolicy
 from jarvis import BaseJob
 from jarvis.hashable import to_hashable
-from jarvis.utils import flatten, nest, time_str, progress_str
+from jarvis.utils import flatten, nest, time_str, progress_str, numpy_dict, tensor_dict
 
 from . import __version__ as VERSION
 from .distributions import BaseDistribution
@@ -18,8 +18,8 @@ from .utils import Array, GymEnv, SB3Policy, SB3Algo
 class BeliefAgent:
 
     def __init__(self,
-        model,
-        algo,
+        model: BeliefModel,
+        algo: SB3Algo,
         gamma: float = 0.99,
     ):
         self.model = model
@@ -40,7 +40,8 @@ class BeliefAgent:
 
     def _return(self, rewards):
         w = self.gamma**np.flip(np.arange(len(rewards)))
-        return (w*rewards).sum()
+        g = (w*rewards).sum()
+        return g
 
     def load_state_dict(self, state):
         self.model.load_state_dict(state['model_state'])
@@ -104,8 +105,7 @@ class BeliefAgentFamily(BaseJob):
         policy_class: Optional[Type[SB3Policy]] = None,
         policy_kwargs: Optional[dict] = None,
         learn_kwargs: Optional[dict] = None,
-        num_epochs: int = 40,
-        eval_interval: int = 4,
+        eval_interval: int = 5,
         save_interval: int = 10,
         **kwargs,
     ):
@@ -121,14 +121,13 @@ class BeliefAgentFamily(BaseJob):
         self.algo_kwargs['policy_kwargs'] = policy_kwargs or {}
         self._fill_default_vals(
             self.algo_kwargs,
-            n_steps=128, batch_size=32,
+            n_steps=64, batch_size=16,
             )
         self.learn_kwargs = learn_kwargs or {}
         self._fill_default_vals(
             self.learn_kwargs,
-            total_timesteps=1280,
+            total_timesteps=256,
             )
-        self.num_epochs = num_epochs
         self.eval_interval = eval_interval
         self.save_interval = save_interval
 
@@ -155,7 +154,6 @@ class BeliefAgentFamily(BaseJob):
             'algo_class': self.algo_class,
             'algo_kwargs': self.algo_kwargs,
             'learn_kwargs': self.learn_kwargs,
-            'num_epochs': self.num_epochs,
         })
         for c_key, c_val in self._config.items():
             c_str = str(c_val)
@@ -189,78 +187,69 @@ class BeliefAgentFamily(BaseJob):
         agent = BeliefAgent(model, algo)
         return agent
 
-    def main(self, config, verbose=1):
+    def main(self, config, num_epochs, verbose=1):
         agent = self.init_agent(config)
         if verbose>0:
             print("Belief agent initiated for environment parameter:")
             print("({})".format(', '.join(['{:g}'.format(p) for p in config['env_param']])))
+
         try:
             ckpt = self.load_ckpt(config, verbose=0)
             epoch = ckpt['epoch']
-            eval_records = ckpt['evals']
             train_times = ckpt['train_times']
+            eval_records = ckpt['eval_records']
             agent_state = ckpt['agent_state']
-            agent.load_state_dict(agent_state)
+            agent.load_state_dict(tensor_dict(agent_state))
         except:
             epoch = 0
-            eval_records = []
             train_times = []
-
-        num_epochs = config['num_epochs']
-        while True:
-            if epoch%self.eval_interval==0 or epoch==num_epochs:
-                if len(eval_records)>0 and eval_records[-1][0]>=epoch:
-                    _, eval_dict = eval_records[-1]
-                else:
-                    eval_dict = agent.evaluate()
-                    eval_records.append((epoch, eval_dict))
-                if verbose>0:
-                    print("Epoch {}".format(progress_str(epoch, num_epochs)))
-                    print("Episode return {:.3f} ({:.2f})".format(
-                        np.mean(eval_dict['returns']),
-                        np.std(eval_dict['returns']),
-                    ))
-                    if train_times:
-                        print("{} per epoch".format(time_str(np.mean(train_times))))
-            if epoch%self.save_interval==0:
-                ckpt = {
-                    'epoch': epoch, 'eval_records': eval_records,
-                    'agent_state': agent.state_dict(),
-                }
-                self.save_ckpt(ckpt, config, verbose=0)
-
-            if epoch==num_epochs:
-                break
-            epoch += 1
-
+            eval_records = []
+        while epoch<num_epochs:
             tic = time.time()
             agent.algo.learn(**config['learn_kwargs'], log_interval=None, reset_num_timesteps=False)
             # TODO check algo loggers for info to save
+            epoch += 1
             toc = time.time()
             train_times.append(toc-tic)
 
-        result = {
-            'version': VERSION,
-            'agent_state': agent.state_dict(),
-            'eval_records': eval_records,
-        }
-        preview = {}
-        return result, preview
+            if epoch%self.eval_interval==0:
+                eval_record = agent.evaluate()
+                eval_records.append(eval_record)
+                if verbose>0:
+                    print("Epoch {}".format(progress_str(epoch, num_epochs)))
+                    print("Episode return {:.3f} ({:.2f})".format(
+                        np.mean(eval_record['returns']),
+                        np.std(eval_record['returns']),
+                    ))
+                    print("{} per epoch".format(time_str(np.mean(train_times))))
 
-    def _to_config(self, env_param):
+            if epoch%self.save_interval==0 or epoch==num_epochs:
+                ckpt = {
+                    'train_times': train_times,
+                    'eval_records': eval_records,
+                    'agent_state': numpy_dict(agent.state_dict()),
+                }
+                preview = {}
+                self.save_ckpt(config, epoch, ckpt, preview)
+                if verbose>0:
+                    print(f"Checkpoint {epoch} saved.")
+
+    def to_config(self, env_param):
         return to_hashable(dict(env_param=env_param, **self._config))
 
     def train_agents(self,
         env_params: Iterable[Array],
         **kwargs,
     ):
-        configs = (self._to_config(env_param) for env_param in env_params)
+        configs = (self.to_config(env_param) for env_param in env_params)
         self.batch(configs, **kwargs)
 
     def optimal_agent(self,
         env_param: Array,
+        num_epochs: int = 48,
+        verbose: int = 0,
     ):
-        result, _ = self.process(self._to_config(env_param), verbose=0)
-        agent = self.init_agent(self._to_config(env_param))
-        agent.load_state_dict(result['agent_state'])
+        ckpt, _ = self.main(self.to_config(env_param), num_epochs, verbose)
+        agent = self.init_agent(self.to_config(env_param))
+        agent.load_state_dict(tensor_dict(ckpt['agent_state']))
         return agent
