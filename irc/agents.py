@@ -1,13 +1,14 @@
 import time
 import pickle
 import numpy as np
+import torch
 from typing import Optional, Type
 from collections.abc import Iterable
 from stable_baselines3.ppo import PPO
 from stable_baselines3.common.policies import ActorCriticPolicy
 from jarvis import BaseJob
 from jarvis.hashable import to_hashable
-from jarvis.utils import flatten, nest, time_str, progress_str, numpy_dict, tensor_dict
+from jarvis.utils import flatten, nest, fill_defaults, time_str, progress_str, numpy_dict, tensor_dict
 
 from . import __version__ as VERSION
 from .distributions import BaseDistribution
@@ -98,8 +99,10 @@ class BeliefAgentFamily(BaseJob):
         store_dir: str = 'cache',
         env_kwargs: Optional[dict] = None,
         model_kwargs: Optional[dict] = None,
-        belief_class: Optional[Type[BaseDistribution]] = None,
-        belief_kwargs: Optional[dict] = None,
+        state_dist_class: Optional[Type[BaseDistribution]] = None,
+        state_dist_kwargs: Optional[dict] = None,
+        obs_dist_class: Optional[Type[BaseDistribution]] = None,
+        obs_dist_kwargs: Optional[dict] = None,
         algo_class: Optional[Type[SB3Algo]] = None,
         algo_kwargs: Optional[dict] = None,
         policy_class: Optional[Type[SB3Policy]] = None,
@@ -107,32 +110,31 @@ class BeliefAgentFamily(BaseJob):
         learn_kwargs: Optional[dict] = None,
         eval_interval: int = 5,
         save_interval: int = 10,
+        device: str = 'cuda',
         **kwargs,
     ):
         super(BeliefAgentFamily, self).__init__(store_dir, **kwargs)
         self.env_class = env_class
         self.env_kwargs = env_kwargs or {}
         self.model_kwargs = model_kwargs or {}
-        self.model_kwargs['belief_class'] = belief_class
-        self.model_kwargs['belief_kwargs'] = belief_kwargs or {}
+        self.model_kwargs['state_dist_class'] = state_dist_class
+        self.model_kwargs['state_dist_kwargs'] = state_dist_kwargs
+        self.model_kwargs['obs_dist_class'] = obs_dist_class
+        self.model_kwargs['obs_dist_kwargs'] = obs_dist_kwargs
         self.algo_class = algo_class or PPO
         self.algo_kwargs = algo_kwargs or {}
         self.algo_kwargs['policy'] = policy_class or ActorCriticPolicy
         self.algo_kwargs['policy_kwargs'] = policy_kwargs or {}
-        self._fill_default_vals(
-            self.algo_kwargs,
-            n_steps=64, batch_size=16,
-            )
+        self.algo_kwargs = fill_defaults(self.algo_kwargs, {'n_steps': 64, 'batch_size': 16})
         self.learn_kwargs = learn_kwargs or {}
-        self._fill_default_vals(
-            self.learn_kwargs,
-            total_timesteps=256,
-            )
+        self.learn_kwargs = fill_defaults(self.learn_kwargs, {'total_timesteps': 256})
+
         self.eval_interval = eval_interval
         self.save_interval = save_interval
+        self.device = torch.device(device) if torch.cuda.is_available() else torch.device('cpu')
 
         self.catalog_path = f'{self.store_dir}/class_catalog.pickle'
-        self._register_classes()
+        self._register()
 
     @staticmethod
     def _fill_default_vals(spec, **kwargs):
@@ -140,13 +142,7 @@ class BeliefAgentFamily(BaseJob):
             if key not in spec:
                 spec[key] = val
 
-    def _register_classes(self):
-        try:
-            with open(self.catalog_path, 'rb') as f:
-                self.catalog = pickle.load(f)
-        except:
-            self.catalog = {}
-        updated = False
+    def _register(self):
         self._config = flatten({
             'env_class': self.env_class,
             'env_kwargs': self.env_kwargs,
@@ -155,11 +151,18 @@ class BeliefAgentFamily(BaseJob):
             'algo_kwargs': self.algo_kwargs,
             'learn_kwargs': self.learn_kwargs,
         })
+        try:
+            with open(self.catalog_path, 'rb') as f:
+                self.catalog = pickle.load(f)
+        except:
+            self.catalog = {}
+        updated = False
         for c_key, c_val in self._config.items():
             c_str = str(c_val)
             if c_str.startswith('<class '):
+                if c_str not in self.catalog:
+                    updated = True
                 self.catalog[c_str] = c_val
-                updated = True
                 self._config[c_key] = c_str
         self._config = nest(self._config)
         if updated:
@@ -167,16 +170,11 @@ class BeliefAgentFamily(BaseJob):
                 pickle.dump(self.catalog, f)
 
     def _raw_config(self, config):
-        if isinstance(config, dict): # only dict object are recreated
-            raw_config = {}
-            for key, val in config.items():
-                if isinstance(val, str) and val in self.catalog:
-                    raw_config[key] = self.catalog[val]
-                else:
-                    raw_config[key] = self._raw_config(val)
-            return raw_config
-        else:
-            return config
+        config = flatten(config)
+        for key, val in config.items():
+            if isinstance(val, str) and val in self.catalog:
+                config[key] = self.catalog[val]
+        return nest(config)
 
     def init_agent(self, config):
         config = self._raw_config(config)
@@ -194,38 +192,32 @@ class BeliefAgentFamily(BaseJob):
             print("({})".format(', '.join(['{:g}'.format(p) for p in config['env_param']])))
 
         try:
-            ckpt = self.load_ckpt(config, verbose=0)
-            epoch = ckpt['epoch']
-            train_times = ckpt['train_times']
+            epoch, ckpt = self.load_ckpt(config)
             eval_records = ckpt['eval_records']
             agent_state = ckpt['agent_state']
             agent.load_state_dict(tensor_dict(agent_state))
+            if verbose>0:
+                print(f"Checkpoint ({epoch}) loaded.")
         except:
             epoch = 0
-            train_times = []
-            eval_records = []
+            eval_records = {}
         while epoch<num_epochs:
-            tic = time.time()
             agent.algo.learn(**config['learn_kwargs'], log_interval=None, reset_num_timesteps=False)
             # TODO check algo loggers for info to save
             epoch += 1
-            toc = time.time()
-            train_times.append(toc-tic)
 
             if epoch%self.eval_interval==0:
                 eval_record = agent.evaluate()
-                eval_records.append(eval_record)
+                eval_records[epoch] = eval_record
                 if verbose>0:
                     print("Epoch {}".format(progress_str(epoch, num_epochs)))
                     print("Episode return {:.3f} ({:.2f})".format(
                         np.mean(eval_record['returns']),
                         np.std(eval_record['returns']),
                     ))
-                    print("{} per epoch".format(time_str(np.mean(train_times))))
 
             if epoch%self.save_interval==0 or epoch==num_epochs:
                 ckpt = {
-                    'train_times': train_times,
                     'eval_records': eval_records,
                     'agent_state': numpy_dict(agent.state_dict()),
                 }
@@ -246,10 +238,12 @@ class BeliefAgentFamily(BaseJob):
 
     def optimal_agent(self,
         env_param: Array,
-        num_epochs: int = 48,
+        num_epochs: int = 40,
         verbose: int = 0,
     ):
-        ckpt, _ = self.main(self.to_config(env_param), num_epochs, verbose)
-        agent = self.init_agent(self.to_config(env_param))
+        self.train_agents([env_param], num_epochs=num_epochs, verbose=verbose, patience=0)
+        config = self.to_config(env_param)
+        _, ckpt = self.load_ckpt(config)
+        agent = self.init_agent(config)
         agent.load_state_dict(tensor_dict(ckpt['agent_state']))
         return agent
