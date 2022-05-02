@@ -30,7 +30,7 @@ class SingleBoxForaging(gym.Env):
         env_spec:
             Environment specification.
         rng:
-            Random generator.
+            Random generator or seed.
 
         """
         self.env_spec = self._full_env_spec(**(env_spec or {}))
