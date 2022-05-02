@@ -3,7 +3,7 @@ import gym
 
 from typing import Optional, Type, Union
 from gym.spaces import MultiDiscrete, Box
-from jarvis.utils import flatten, nest
+from jarvis.utils import fill_defaults
 
 from .distributions import BaseDistribution, DiscreteDistribution
 from .utils import Tensor, RandGen, GymEnv
@@ -17,11 +17,36 @@ class BeliefModel(gym.Env):
     algorithm.
 
     """
+    D_EST_SPEC = { # default specification for distribution estimation
+        'state_prior': {
+            'num_samples': 100,
+            'optim_kwargs': {
+                'batch_size': 32, 'num_epochs': 10,
+                'lr': 0.01, 'momentum': 0.9, 'weight_decay': 1e-4,
+            },
+        },
+        'obs_conditional': {
+            'num_samples': 100,
+            'optim_kwargs': {
+                'batch_size': 32, 'num_epochs': 10,
+                'lr': 0.01, 'momentum': 0.9, 'weight_decay': 1e-4,
+            },
+        },
+        'belief': {
+            'num_samples': 20,
+            'optim_kwargs': {
+                'batch_size': 16, 'num_epochs': 5,
+                'lr': 0.01, 'momentum': 0.9, 'weight_decay': 1e-4,
+            },
+        },
+    }
 
     def __init__(self,
         env: GymEnv,
-        belief_class: Optional[Type[BaseDistribution]] = None,
-        belief_kwargs: Optional[dict] = None,
+        state_dist_class: Optional[Type[BaseDistribution]] = None,
+        state_dist_kwargs: Optional[dict] = None,
+        obs_dist_class: Optional[Type[BaseDistribution]] = None,
+        obs_dist_kwargs: Optional[dict] = None,
         p_s_o: Optional[BaseDistribution] = None,
         p_o_s: Optional[BaseDistribution] = None,
         est_spec: Optional[dict] = None,
@@ -34,80 +59,42 @@ class BeliefModel(gym.Env):
             The assumed environment, with a few utility methods implemented,
             such as `get_state`, `set_state` etc. Detailed requirements are
             specified in 'README.md'.
-        belief_class, belief_kwargs:
-            Class and key-word arguments for belief.
-        b_param_init:
-            Initial parameters of belief. If not provided, will be estimated
-            using the assumed environment.
-        p_o_s:
-            Conditional distribution p(o|s) of observation given environment
-            state. If not provided, will be estimated using the assumed
-            environment.
-        est_spec:
-            Specifications for estimating state prior p(s), observation
-            conditional distribution p(o|s) and parameter of the new belief.
-        rng:
-            Random generator.
 
         """
         self.env = env
         self.action_space = self.env.action_space
 
-        self.belief_class = belief_class
-        if self.belief_class is None:
-            if isinstance(self.env.state_space, MultiDiscrete):
-                self.belief_class = DiscreteDistribution
-            if isinstance(self.env.state_space, Box):
-                raise NotImplementedError
-        self.belief_kwargs = belief_kwargs or {}
-        self.belief = self.belief_class(self.env.state_space, **self.belief_kwargs)
-        self.belief_space = Box(-np.inf, np.inf, shape=self.belief.get_param_vec().shape)
+        self.state_dist_class = state_dist_class or self._get_default_dist_class(self.env.state_space)
+        self.state_dist_kwargs = state_dist_kwargs or {}
+        self.obs_dist_class = obs_dist_class or self._get_default_dist_class(self.env.observation_space)
+        self.obs_dist_kwargs = obs_dist_kwargs or {}
+
+        self.p_s = self.state_dist_class(self.env.state_space, **self.state_dist_kwargs)
+        self.belief_space = Box(-np.inf, np.inf, shape=self.p_s.get_param_vec().shape)
         self.observation_space = self.belief_space
 
-        self.p_s_o = p_s_o
-        if self.p_s_o is not None:
-            assert self.p_s_o.x_space==self.env.state_space
-            assert self.p_s_o.y_space==self.env.observation_space
-            assert len(self.p_s_o.get_param_vec())==len(self.belief.get_param_vec())
-        self.p_o_s = p_o_s
-        if self.p_o_s is not None:
-            assert self.p_o_s.x_space==self.env.observation_space
-            assert self.p_o_s.y_space==self.env.state_space
-        self.est_spec = self._get_est_spec(**(est_spec or {}))
+        self.p_s_o = p_s_o or self.state_dist_class(
+            x_space=self.env.state_space, y_space=self.env.observation_space,
+            **self.state_dist_kwargs,
+            )
+        assert self.p_s_o.x_space==self.env.state_space and self.p_s_o.y_space==self.env.observation_space
+        assert len(self.p_s_o.get_param_vec())==len(self.p_s.get_param_vec())
+        self.p_o_s = p_o_s or self.obs_dist_class(
+            x_space=self.env.observation_space, y_space=self.env.state_space,
+            **self.obs_dist_kwargs,
+            )
+        assert self.p_o_s.x_space==self.env.observation_space and self.p_o_s.y_space==self.env.state_space
 
+        self.est_spec = fill_defaults((est_spec or {}), self.D_EST_SPEC)
         self.rng = rng if isinstance(rng, RandGen) else np.random.default_rng(rng)
 
     @staticmethod
-    def _get_est_spec(**kwargs):
-        r"""Returns full estimation specification."""
-        est_spec = flatten({
-            'state_prior': {
-                'num_samples': 100,
-                'optim_kwargs': {
-                    'batch_size': 32, 'num_epochs': 10,
-                    'lr': 0.01, 'momentum': 0.9, 'weight_decay': 1e-4,
-                },
-            },
-            'obs_conditional': {
-                'dist_class': None, 'dist_kwargs': None,
-                'num_samples': 100,
-                'optim_kwargs': {
-                    'batch_size': 32, 'num_epochs': 10,
-                    'lr': 0.01, 'momentum': 0.9, 'weight_decay': 1e-4,
-                },
-            },
-            'belief': {
-                'num_samples': 20,
-                'optim_kwargs': {
-                    'batch_size': 16, 'num_epochs': 5,
-                    'lr': 0.01, 'momentum': 0.9, 'weight_decay': 1e-4,
-                },
-            }
-        })
-        for key, val in flatten(kwargs).items():
-            if key in est_spec:
-                est_spec[key] = val
-        return nest(est_spec)
+    def _get_default_dist_class(space):
+        if isinstance(space, MultiDiscrete):
+            return DiscreteDistribution
+        if isinstance(space, Box):
+            raise NotImplementedError
+        raise RuntimeError(f"Default class for {space} is not defined.")
 
     def estimate_state_prior(self):
         r"""Estimates initial belief."""
@@ -120,10 +107,6 @@ class BeliefModel(gym.Env):
             obss.append(obs)
         self.env.set_state(_state_to_restore)
         # estimate the initial belief
-        self.p_s_o = self.belief_class(
-            x_space=self.env.state_space, y_space=self.env.observation_space,
-            **self.belief_kwargs,
-        )
         self.p_s_o.estimate(
             np.array(states), np.array(obss), verbose=0,
             **self.est_spec['state_prior']['optim_kwargs'],
@@ -144,17 +127,6 @@ class BeliefModel(gym.Env):
             states.append(self.env.get_state())
         self.env.set_state(_state_to_restore)
         # estimate the conditional distribution
-        if self.est_spec['obs_conditional']['dist_class'] is None:
-            if isinstance(self.env.observation_space, MultiDiscrete):
-                dist_class = DiscreteDistribution
-            if isinstance(self.env.observation_space, Box):
-                raise NotImplemented
-        else:
-            dist_class = self.est_spec['obs_conditional']['dist_class']
-        self.p_o_s = dist_class(
-            x_space=self.env.observation_space, y_space=self.env.state_space,
-            **(self.est_spec['obs_conditional']['dist_kwargs'] or {}),
-        )
         self.p_o_s.estimate(
             np.array(obss), np.array(states), verbose=0,
             **self.est_spec['obs_conditional']['optim_kwargs'],
@@ -179,11 +151,11 @@ class BeliefModel(gym.Env):
         if env is None:
             env = self.env
         obs = env.reset()
-        b_param = self.p_s_o.param_net(np.array(obs)[None])[0].data.cpu().numpy()
+        belief = self.p_s_o.param_net(np.array(obs)[None])[0].data.cpu().numpy()
         if keep_obs:
-            return b_param, obs
+            return belief, obs
         else:
-            return b_param
+            return belief
 
     def step(self, action, env=None):
         r"""Runs one step.
@@ -205,7 +177,8 @@ class BeliefModel(gym.Env):
             'obs': obs, 'state': env.get_state(),
         })
         self.update_belief(action, obs)
-        return self.belief.get_param_vec().cpu().numpy(), reward, done, info
+        belief = self.p_s.get_param_vec().cpu().numpy()
+        return belief, reward, done, info
 
     def update_belief(self, action, obs):
         r"""Updates belief.
@@ -225,7 +198,7 @@ class BeliefModel(gym.Env):
         _state_to_restore = self.env.get_state()
         states, weights = [], []
         for _ in range(self.est_spec['belief']['num_samples']):
-            state = self.belief.sample()
+            state = self.p_s.sample()
             self.env.set_state(state)
             self.env.step(action)
             next_state = self.env.get_state()
@@ -233,7 +206,7 @@ class BeliefModel(gym.Env):
             weights.append(np.exp(self.p_o_s.loglikelihood(
                 np.array(obs)[None], np.array(next_state)[None]).item()))
         self.env.set_state(_state_to_restore)
-        self.belief.estimate( # TODO add running statistics for inspection
+        self.p_s.estimate( # TODO add running statistics for inspection
             xs=np.array(states), ws=np.array(weights), verbose=0,
             **self.est_spec['belief']['optim_kwargs'],
         )
