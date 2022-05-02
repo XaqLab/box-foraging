@@ -11,4 +11,4 @@ if __name__=='__main__':
             for r_food in [1, 2, 5, 10]:
                 env_params.append((p_appear, p_cue, r_food))
     random.shuffle(env_params)
-    bafam.train_agents(env_params, num_epochs=24)
+    bafam.train_agents(env_params, num_epochs=24, verbose=1)
