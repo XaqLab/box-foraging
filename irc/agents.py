@@ -63,11 +63,14 @@ class BeliefAgent:
     def run_one_episode(self,
         env: Optional[GymEnv] = None,
         num_steps: int = 40,
+        query_states: Optional[Array] = None,
     ):
         _to_restore_train = self.algo.policy.training # policy will be set to evaluation mode temporarily
         self.algo.policy.set_training_mode(False)
         actions, rewards, states, obss, beliefs = [], [], [], [], []
-        belief = self.model.reset()
+        belief, obs = self.model.reset(keep_obs=True)
+        beliefs.append(belief)
+        obss.append(obs)
         t = 0
         while True:
             action, _ = self.algo.predict(belief)
@@ -82,12 +85,20 @@ class BeliefAgent:
                 break
         episode = {
             'num_steps': t,
-            'actions': np.array(actions),
-            'rewards': np.array(rewards),
-            'states': np.array(states),
-            'obss': np.array(obss),
-            'beliefs': np.array(beliefs),
+            'actions': np.array(actions), # [0, t)
+            'rewards': np.array(rewards), # [0, t)
+            'states': np.array(states), # [1, t]
+            'obss': np.array(obss), # [0, t]
+            'beliefs': np.array(beliefs), # [0, t]
         }
+        if query_states is not None:
+            device = self.model.p_s.get_param_vec().device
+            probs = []
+            for belief in beliefs:
+                self.model.p_s.set_param_vec(torch.tensor(belief, device=device))
+                with torch.no_grad():
+                    probs.append(np.exp(self.model.p_s.loglikelihood(query_states).cpu().numpy()))
+            episode['probs'] = np.array(probs)
         self.algo.policy.set_training_mode(_to_restore_train)
         return episode
 
@@ -135,12 +146,6 @@ class BeliefAgentFamily(BaseJob):
 
         self.catalog_path = f'{self.store_dir}/class_catalog.pickle'
         self._register()
-
-    @staticmethod
-    def _fill_default_vals(spec, **kwargs):
-        for key, val in kwargs.items():
-            if key not in spec:
-                spec[key] = val
 
     def _register(self):
         self._config = flatten({
