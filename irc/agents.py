@@ -17,12 +17,27 @@ from .utils import Array, GymEnv, SB3Policy, SB3Algo
 
 
 class BeliefAgent:
+    r"""An agent with an internal model and uses belief for decision."""
 
     def __init__(self,
         model: BeliefModel,
         algo: SB3Algo,
         gamma: float = 0.99,
     ):
+        r"""
+        Args
+        ----
+        model:
+            The internal model of assumed environment. Belief about the states
+            is updated by it.
+        algo:
+            The reinfocement learning algorithm for learning the policy based on
+            belief.
+        gamma:
+            Reward discount factor. It does not have to be the same one in `algo`
+            for calculating advantages.
+
+        """
         self.model = model
         self.algo = algo
         self.gamma = gamma
@@ -31,40 +46,84 @@ class BeliefAgent:
         actions: Array,
         obss: Array,
     ):
+        r"""Returns the likelihood of given episode.
+
+        Args
+        ----
+        actions:
+            Actions taken by the agent, in [0, t).
+        obss:
+            Observations to the agent, in [0, t]. The last one will not be used.
+
+        """
         raise NotImplementedError
 
     def state_dict(self):
+        r"""Returns state dictionary."""
         return {
             'model_state': self.model.state_dict(),
             'policy_state': self.algo.policy.state_dict(),
         }
 
+    def load_state_dict(self, state):
+        r"""Loads state dictionary."""
+        self.model.load_state_dict(state['model_state'])
+        self.algo.policy.load_state_dict(state['policy_state'])
+
     def _return(self, rewards):
+        r"""Returns cumulative discounted reward."""
         w = self.gamma**np.flip(np.arange(len(rewards)))
         g = (w*rewards).sum()
         return g
 
-    def load_state_dict(self, state):
-        self.model.load_state_dict(state['model_state'])
-        self.algo.policy.load_state_dict(state['policy_state'])
-
     def evaluate(self, num_episodes=10, num_steps=80):
+        r"""Evaluates current policy with respect to internal model.
+
+        Args
+        ----
+        num_episodes:
+            Number of evaluation episodes.
+
+        Returns
+        -------
+        eval_record: dict
+            Evaluation record, used for keeping track of training progress.
+
+        """
         returns = []
         for _ in range(num_episodes):
             episode = self.run_one_episode(num_steps=num_steps)
             rewards = episode['rewards']
             returns.append(self._return(rewards))
-        return {
+        eval_record = {
             'num_episodes': num_episodes,
             'num_steps': num_steps,
             'returns': returns,
             }
+        return eval_record
 
     def run_one_episode(self,
         env: Optional[GymEnv] = None,
         num_steps: int = 40,
         query_states: Optional[Array] = None,
     ):
+        r"""Runs one episode.
+
+        Args
+        ----
+        env:
+            The environment to interact with.
+        num_steps:
+            Maximum number of time steps of each episode.
+        query_states: (num_samples, num_vars_state)
+            Query states that need to return probabilities for.
+
+        Returns
+        -------
+        episode: dict
+            Results of one episode.
+
+        """
         _to_restore_train = self.algo.policy.training # policy will be set to evaluation mode temporarily
         self.algo.policy.set_training_mode(False)
         actions, rewards, states, obss, beliefs = [], [], [], [], []
@@ -98,12 +157,18 @@ class BeliefAgent:
                 self.model.p_s.set_param_vec(torch.tensor(belief, device=device))
                 with torch.no_grad():
                     probs.append(np.exp(self.model.p_s.loglikelihood(query_states).cpu().numpy()))
-            episode['probs'] = np.array(probs)
+            episode['probs'] = np.array(probs) # [0, t]
         self.algo.policy.set_training_mode(_to_restore_train)
         return episode
 
 
 class BeliefAgentFamily(BaseJob):
+    r"""A family of belief agents.
+
+    The class uses a folder for saving training checkpoints. Batch processing
+    over a set of assumed environment parameters is implemented.
+
+    """
 
     def __init__(self,
         env_class: Type[GymEnv],
@@ -148,6 +213,7 @@ class BeliefAgentFamily(BaseJob):
         self._register()
 
     def _register(self):
+        r"""Registers base configuration and class objects."""
         self._config = flatten({
             'env_class': self.env_class,
             'env_kwargs': self.env_kwargs,
@@ -175,6 +241,7 @@ class BeliefAgentFamily(BaseJob):
                 pickle.dump(self.catalog, f)
 
     def _raw_config(self, config):
+        r"""Returns the raw configuration with class objects as values."""
         config = flatten(config)
         for key, val in config.items():
             if isinstance(val, str) and val in self.catalog:
@@ -182,6 +249,7 @@ class BeliefAgentFamily(BaseJob):
         return nest(config)
 
     def init_agent(self, config):
+        r"""Returns a new agent."""
         config = self._raw_config(config)
         env = config['env_class'](**config['env_kwargs'])
         env.set_env_param(config['env_param'])
@@ -190,7 +258,8 @@ class BeliefAgentFamily(BaseJob):
         agent = BeliefAgent(model, algo)
         return agent
 
-    def main(self, config, num_epochs, verbose=1):
+    def main(self, config, num_epochs=40, verbose=1):
+        r"""Trains an agent."""
         agent = self.init_agent(config)
         if verbose>0:
             print("Belief agent initiated for environment parameter:")
@@ -232,12 +301,14 @@ class BeliefAgentFamily(BaseJob):
                     print(f"Checkpoint {epoch} saved.")
 
     def to_config(self, env_param):
+        r"""Converts environment parameter to configuration."""
         return to_hashable(dict(env_param=env_param, **self._config))
 
     def train_agents(self,
         env_params: Iterable[Array],
         **kwargs,
     ):
+        r"""Train agents for a list of environment parameters."""
         configs = (self.to_config(env_param) for env_param in env_params)
         self.batch(configs, **kwargs)
 
@@ -246,6 +317,7 @@ class BeliefAgentFamily(BaseJob):
         num_epochs: int = 40,
         verbose: int = 0,
     ):
+        r"""Returns the optimal agent of given environment parameter."""
         self.train_agents([env_param], num_epochs=num_epochs, verbose=verbose, patience=0)
         config = self.to_config(env_param)
         _, ckpt = self.load_ckpt(config)

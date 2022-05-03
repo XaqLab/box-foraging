@@ -399,8 +399,10 @@ class BaseDistribution(torch.nn.Module):
 
         Args
         ----
-        xs: (num_samples, num_vars)
+        xs: (num_samples, num_vars_x)
             Data samples.
+        ys: (num_samples, num_vars_y)
+            Conditioned values.
         param_vec: (num_params,)
             Concatenated parameters for all potentials.
 
