@@ -164,16 +164,15 @@ class BeliefModel(gym.Env):
         self.p_o_s.load_state_dict(state['p_o_s_state'])
         self.to_estimate = False
 
-    def reset(self, env=None, keep_obs=False):
+    def reset(self, env=None, return_info=False):
         r"""Resets the environment.
 
         Args
         ----
         env:
             The actual environment to interact with.
-        keep_obs:
-            Whether to return raw observation or not, necessary for plotting
-            full trajectory.
+        return_info:
+            Whether to return auxiliary information or not.
 
         Returns
         -------
@@ -191,8 +190,9 @@ class BeliefModel(gym.Env):
             env = self.env
         obs = env.reset()
         belief = self.p_s_o.param_net(np.array(obs)[None])[0].data.cpu().numpy()
-        if keep_obs:
-            return belief, obs
+        if return_info:
+            info = {'obs': obs, 'state': env.get_state()}
+            return belief, info
         else:
             return belief
 

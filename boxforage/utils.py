@@ -17,7 +17,7 @@ def plot_single_box_episode(agent, env=None, num_steps=40, figsize=(10, 1.5)):
 
     fig, ax = plt.subplots(figsize=figsize)
     h = ax.imshow(
-        states.T, aspect=aspect, extent=[0.5, num_steps+0.5, -0.5, 0.5],
+        states.T, aspect=aspect, extent=[-0.5, num_steps+0.5, -0.5, 0.5],
         vmin=0, vmax=1, origin='lower', cmap='coolwarm',
         )
     cbar = plt.colorbar(h, label='Has food')

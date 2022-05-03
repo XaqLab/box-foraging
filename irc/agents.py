@@ -127,9 +127,10 @@ class BeliefAgent:
         _to_restore_train = self.algo.policy.training # policy will be set to evaluation mode temporarily
         self.algo.policy.set_training_mode(False)
         actions, rewards, states, obss, beliefs = [], [], [], [], []
-        belief, obs = self.model.reset(keep_obs=True)
+        belief, info = self.model.reset(return_info=True)
+        states.append(info['state'])
+        obss.append(info['obs'])
         beliefs.append(belief)
-        obss.append(obs)
         t = 0
         while True:
             action, _ = self.algo.predict(belief)
@@ -146,7 +147,7 @@ class BeliefAgent:
             'num_steps': t,
             'actions': np.array(actions), # [0, t)
             'rewards': np.array(rewards), # [0, t)
-            'states': np.array(states), # [1, t]
+            'states': np.array(states), # [0, t]
             'obss': np.array(obss), # [0, t]
             'beliefs': np.array(beliefs), # [0, t]
         }
