@@ -103,7 +103,7 @@ class BeliefModel(gym.Env):
         assert self.p_o_s.x_space==self.env.observation_space and self.p_o_s.y_space==self.env.state_space
 
         self.to_estimate = True
-        self.est_spec = fill_defaults((est_spec or {}), self.D_EST_SPEC)
+        self.est_spec = fill_defaults(est_spec or {}, self.D_EST_SPEC)
         self.rng = rng if isinstance(rng, RandGen) else np.random.default_rng(rng)
 
     @staticmethod
