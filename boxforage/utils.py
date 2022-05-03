@@ -2,22 +2,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-def plot_single_box_trial(b_env, trial, figsize=(10, 1.5)):
-    num_steps = trial['num_steps']
-    actions = trial['actions']
-    rewards = trial['rewards']
-    states = trial['states']
-    obss = trial['obss']
-
-    _b_param_to_restore = b_env.belief.get_param_vec()
-    device = _b_param_to_restore.device
-    state_true, probs = (1,), []
-    for b_param in trial['beliefs']:
-        b_env.belief.set_param_vec(torch.tensor(b_param, device=device))
-        with torch.no_grad():
-            probs.append(np.exp(b_env.belief.loglikelihood(np.array(state_true)[None]).item()))
-    probs = np.array(probs)
-    b_env.belief.set_param_vec(_b_param_to_restore)
+def plot_single_box_episode(agent, env=None, num_steps=40, figsize=(10, 1.5)):
+    query_states = np.array([(1,)])
+    episode = agent.run_one_episode(env, num_steps, query_states)
+    actions = episode['actions']
+    rewards = episode['rewards']
+    states = episode['states']
+    obss = episode['obss']
+    probs = episode['probs']
 
     fig_w, fig_h = figsize
     aspect = num_steps*fig_h/fig_w*1.5
@@ -37,10 +29,10 @@ def plot_single_box_trial(b_env, trial, figsize=(10, 1.5)):
     ax.set_xlabel('Time')
     figs.append(fig)
 
-    num_shades = b_env.env.env_spec['box']['num_shades']
+    num_shades = agent.model.env.env_spec['box']['num_shades']
     fig, ax = plt.subplots(figsize=figsize)
     h = ax.imshow(
-        obss.T, aspect=aspect, extent=[0.5, num_steps+0.5, -0.5, 0.5],
+        obss.T, aspect=aspect, extent=[-0.5, num_steps+0.5, -0.5, 0.5],
         vmin=0, vmax=num_shades, origin='lower', cmap='coolwarm',
         )
     cbar = plt.colorbar(h, label='Color cue')
@@ -58,7 +50,7 @@ def plot_single_box_trial(b_env, trial, figsize=(10, 1.5)):
 
     fig, ax = plt.subplots(figsize=figsize)
     h = ax.imshow(
-        probs[None], aspect=aspect, extent=[0.5, num_steps+0.5, -0.5, 0.5],
+        probs.T, aspect=aspect, extent=[-0.5, num_steps+0.5, -0.5, 0.5],
         vmin=0, vmax=1, origin='lower', cmap='coolwarm',
         )
     cbar = plt.colorbar(h, label='Belief')

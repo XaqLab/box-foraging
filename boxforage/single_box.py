@@ -4,7 +4,7 @@ from gym.spaces import Discrete, MultiDiscrete
 from typing import Optional, Union
 RandGen = np.random.Generator
 
-from jarvis.utils import flatten, nest
+from jarvis.utils import fill_defaults
 
 
 class SingleBoxForaging(gym.Env):
@@ -18,6 +18,14 @@ class SingleBoxForaging(gym.Env):
     food exists, and 1-p otherwise.
 
     """
+    D_ENV_SPEC = {
+        'box': {
+            'num_shades': 3, 'p_appear': 0.2, 'p_cue': 0.8,
+        },
+        'reward': {
+            'food': 10., 'fetch': -1.,
+        },
+    }
 
     def __init__(self,
         *,
@@ -33,29 +41,13 @@ class SingleBoxForaging(gym.Env):
             Random generator or seed.
 
         """
-        self.env_spec = self._full_env_spec(**(env_spec or {}))
+        self.env_spec = fill_defaults(env_spec or {}, self.D_ENV_SPEC)
         self.state_space = MultiDiscrete([2]) # box state
         self.action_space = Discrete(2) # wait and fetch
         self.observation_space = MultiDiscrete([self.env_spec['box']['num_shades']+1]) # color cue
 
         self.rng = rng if isinstance(rng, RandGen) else np.random.default_rng(rng)
         self.reset()
-
-    @staticmethod
-    def _full_env_spec(**kwargs):
-        r"""Returns full environment specification by filling default values."""
-        env_spec = flatten({
-            'box': {
-                'num_shades': 3, 'p_appear': 0.2, 'p_cue': 0.8,
-            },
-            'reward': {
-                'food': 10., 'fetch': -1.,
-            },
-        })
-        for key, val in flatten(kwargs).items():
-            if key in env_spec:
-                env_spec[key] = val
-        return nest(env_spec)
 
     def get_env_param(self):
         r"""Returns environment parameters."""
