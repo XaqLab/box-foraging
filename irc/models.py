@@ -59,6 +59,23 @@ class BeliefModel(gym.Env):
             The assumed environment, with a few utility methods implemented,
             such as `get_state`, `set_state` etc. Detailed requirements are
             specified in 'README.md'.
+        state_dist_class, state_dist_kwargs:
+            Class and key word arguments for state distributions, including the
+            running belief and a conditional distribution p(s|o) at initial
+            state.
+        obs_dist_class, obs_dist_kwargs:
+            Class and key word arguments for observation distribution, used for
+            conditional distribution p(o|s).
+        p_s_o:
+            Prior distribution of state given initial observation. If not
+            provided, it will be estimated using assumed environment `env`.
+        p_o_s:
+            Conditional distribution of observation. If not provided, it will be
+            estimated using assumed environment `env`.
+        est_spec:
+            Estimation specifications.
+        rng:
+            Random seed or generator.
 
         """
         self.env = env
@@ -85,6 +102,7 @@ class BeliefModel(gym.Env):
             )
         assert self.p_o_s.x_space==self.env.observation_space and self.p_o_s.y_space==self.env.state_space
 
+        self.to_estimate = True
         self.est_spec = fill_defaults((est_spec or {}), self.D_EST_SPEC)
         self.rng = rng if isinstance(rng, RandGen) else np.random.default_rng(rng)
 
@@ -133,6 +151,7 @@ class BeliefModel(gym.Env):
             )
 
     def state_dict(self):
+        r"""Returns state dictionary."""
         state = {
             'p_s_o_state': self.p_s_o.state_dict(),
             'p_o_s_state': self.p_o_s.state_dict(),
@@ -140,14 +159,34 @@ class BeliefModel(gym.Env):
         return state
 
     def load_state_dict(self, state):
+        r"""Loads state dictionary."""
         self.p_s_o.load_state_dict(state['p_s_o_state'])
         self.p_o_s.load_state_dict(state['p_o_s_state'])
+        self.to_estimate = False
 
     def reset(self, env=None, keep_obs=False):
-        if self.p_s_o is None:
+        r"""Resets the environment.
+
+        Args
+        ----
+        env:
+            The actual environment to interact with.
+        keep_obs:
+            Whether to return raw observation or not, necessary for plotting
+            full trajectory.
+
+        Returns
+        -------
+        belief: Array
+            Parameter of initial belief.
+        obs: Array
+            Initial observation.
+
+        """
+        if self.to_estimate:
             self.estimate_state_prior()
-        if self.p_o_s is None:
             self.estimate_obs_conditional()
+            self.to_estimate = False
         if env is None:
             env = self.env
         obs = env.reset()
@@ -163,11 +202,23 @@ class BeliefModel(gym.Env):
         Args
         ----
         action:
-            Action at time t.
+            Action at time t, which is supposed to be determined by belief at
+            time t.
         env:
             The actual environment to interact with. It can differ from the
             assumed environment `self.env`, though the latter is always used for
             belief updating.
+
+        Returns
+        -------
+        belief: Array
+            Belief at time t+1.
+        reward: float
+            Reward at time t.
+        done: bool
+            Whether to terminate the episode.
+        info: dict
+            Auxiliary information containing observation and state at t+1.
 
         """
         if env is None:
