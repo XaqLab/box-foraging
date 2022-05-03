@@ -5,7 +5,7 @@ from torch.nn.functional import embedding
 from gym.spaces import MultiDiscrete, Box
 from typing import Optional, Type, Union
 from jarvis.utils import progress_str, time_str
-from .utils import Array, Tensor, VarSpace, RandGen
+from .utils import Array, Tensor, VarSpace, RandGen, loss_summary
 
 
 class BasePotential(torch.nn.Module):
@@ -319,6 +319,7 @@ class BaseDistribution(torch.nn.Module):
             )
 
         self.rng = rng if isinstance(rng, RandGen) else np.random.default_rng(rng)
+        self.est_stats = {}
 
     def get_param_vec(self):
         r"""Returns the concatenated parameter vector.
@@ -487,6 +488,7 @@ class BaseDistribution(torch.nn.Module):
             lr=lr, momentum=momentum, weight_decay=weight_decay,
         )
         num_batches = num_samples*num_epochs//batch_size
+        losses = []
         tic = time.time()
         for b_idx in range(1, num_batches+1):
             s_idxs = self.rng.choice(num_samples, batch_size, p=ws)
@@ -497,11 +499,19 @@ class BaseDistribution(torch.nn.Module):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            losses.append(loss.item())
             if verbose>1 and (b_idx%(-(-num_batches//6))==0 or b_idx==num_batches):
                 print("{} {:.3f}".format(
                     progress_str(b_idx, num_batches), loss.item()
                     ))
         toc = time.time()
+        optimality, fvu = loss_summary(np.array(losses))
+        self.est_stats = {
+            'num_samples': num_samples,
+            'batch_size': batch_size, 'num_epochs': num_epochs,
+            'lr': lr, 'momentum': momentum, 'weight_decay': weight_decay,
+            'optimality': optimality, 'fvu': fvu, 't_elapse': toc-tic,
+        }
         if verbose>0:
             print("{} epochs trained on {} samples, log likelihood {:.3f} ({})".format(
                 num_epochs, num_samples, -loss.item(), time_str(toc-tic),
