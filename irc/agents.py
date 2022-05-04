@@ -107,7 +107,6 @@ class BeliefAgent:
     def run_one_episode(self,
         env: Optional[GymEnv] = None,
         num_steps: int = 40,
-        query_states: Optional[Array] = None,
     ):
         r"""Runs one episode.
 
@@ -117,8 +116,6 @@ class BeliefAgent:
             The environment to interact with.
         num_steps:
             Maximum number of time steps of each episode.
-        query_states: (num_samples, num_vars_state)
-            Query states that need to return probabilities for.
 
         Returns
         -------
@@ -158,16 +155,30 @@ class BeliefAgent:
             'optimalities': np.array(optimalities),
             'fvus': np.array(fvus),
         }
-        if query_states is not None:
-            device = self.model.p_s.get_param_vec().device
-            probs = []
-            for belief in beliefs:
-                self.model.p_s.set_param_vec(torch.tensor(belief, device=device))
-                with torch.no_grad():
-                    probs.append(np.exp(self.model.p_s.loglikelihood(query_states).cpu().numpy()))
-            episode['probs'] = np.array(probs) # [0, t]
         self.algo.policy.set_training_mode(_to_restore_train)
         return episode
+
+    def query_probs(self, belief: Array, states: Array):
+        r"""Returns probabilities of queried states.
+
+        Args
+        ----
+        belief: (num_vars_belief)
+            Parameters of state distribution.
+        query_states: (num_samples, num_vars_state)
+            Queried states.
+
+        Returns
+        -------
+        probs: (num_samples,) Array
+            Probability mass/density values of queried states.
+
+        """
+        device = self.model.p_s.get_param_vec().device
+        self.model.p_s.set_param_vec(torch.tensor(belief, device=device))
+        with torch.no_grad():
+            probs = np.exp(self.model.p_s.loglikelihood(states).cpu().numpy())
+        return probs
 
 
 class BeliefAgentFamily(BaseJob):
