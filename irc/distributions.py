@@ -319,7 +319,7 @@ class BaseDistribution(torch.nn.Module):
             )
 
         self.rng = rng if isinstance(rng, RandGen) else np.random.default_rng(rng)
-        self.est_stats = {}
+        self.est_stats = {} # stats for estimating distribution parameters
 
     def get_param_vec(self):
         r"""Returns the concatenated parameter vector.

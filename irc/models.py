@@ -191,7 +191,11 @@ class BeliefModel(gym.Env):
         obs = env.reset()
         belief = self.p_s_o.param_net(np.array(obs)[None])[0].data.cpu().numpy()
         if return_info:
-            info = {'obs': obs, 'state': env.get_state()}
+            info = {
+                'obs': obs, 'state': env.get_state(),
+                'p_s_o_est_stats': self.p_s_o.est_stats,
+                'p_o_s_est_stats': self.p_o_s.est_stats,
+            }
             return belief, info
         else:
             return belief
@@ -224,11 +228,12 @@ class BeliefModel(gym.Env):
         if env is None:
             env = self.env
         obs, reward, done, info = env.step(action)
-        info.update({
-            'obs': obs, 'state': env.get_state(),
-        })
         self.update_belief(action, obs)
         belief = self.p_s.get_param_vec().cpu().numpy()
+        info.update({
+            'obs': obs, 'state': env.get_state(),
+            'p_s_est_stats': self.p_s.est_stats,
+        })
         return belief, reward, done, info
 
     def update_belief(self, action, obs):

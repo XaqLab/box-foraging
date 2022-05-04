@@ -23,10 +23,13 @@ def loss_summary(losses: Array, e_idxs: Optional[Array] = None):
     k = 1/((losses<(a*np.exp(-1)+b)).nonzero()[0][0]+1)
     if e_idxs is None:
         e_idxs = np.arange(1, num_epochs+1)
-    (a, b, k), _ = curve_fit(
-        exp_decay, e_idxs, losses, p0=(a, b, k),
-        bounds=((0, -np.inf, 0), (np.inf, np.inf, np.inf)),
-        )
-    optimality = 1-np.exp(-k*num_epochs)
-    fvu = ((losses-exp_decay(e_idxs, a, b, k))**2).mean()/losses.var()
+    try:
+        (a, b, k), _ = curve_fit(
+            exp_decay, e_idxs, losses, p0=(a, b, k),
+            bounds=((0, -np.inf, 0), (np.inf, np.inf, np.inf)),
+            )
+        optimality = 1-np.exp(-k*num_epochs)
+        fvu = ((losses-exp_decay(e_idxs, a, b, k))**2).mean()/losses.var()
+    except:
+        optimality, fvu = np.nan, np.nan
     return optimality, fvu

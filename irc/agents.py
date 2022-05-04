@@ -76,7 +76,7 @@ class BeliefAgent:
         g = (w*rewards).sum()
         return g
 
-    def evaluate(self, num_episodes=10, num_steps=80):
+    def evaluate(self, num_episodes=20, num_steps=80):
         r"""Evaluates current policy with respect to internal model.
 
         Args
@@ -90,15 +90,17 @@ class BeliefAgent:
             Evaluation record, used for keeping track of training progress.
 
         """
-        returns = []
+        returns, optimalities = [], []
         for _ in range(num_episodes):
             episode = self.run_one_episode(num_steps=num_steps)
             rewards = episode['rewards']
             returns.append(self._return(rewards))
+            optimalities.append(np.nanmean(episode['optimalities']))
         eval_record = {
             'num_episodes': num_episodes,
             'num_steps': num_steps,
             'returns': returns,
+            'optimalities': optimalities,
             }
         return eval_record
 
@@ -127,6 +129,7 @@ class BeliefAgent:
         _to_restore_train = self.algo.policy.training # policy will be set to evaluation mode temporarily
         self.algo.policy.set_training_mode(False)
         actions, rewards, states, obss, beliefs = [], [], [], [], []
+        optimalities, fvus = [], []
         belief, info = self.model.reset(return_info=True)
         states.append(info['state'])
         obss.append(info['obs'])
@@ -140,6 +143,8 @@ class BeliefAgent:
             states.append(info['state'])
             obss.append(info['obs'])
             beliefs.append(belief)
+            optimalities.append(self.model.p_s.est_stats['optimality'])
+            fvus.append(self.model.p_s.est_stats['fvu'])
             t += 1
             if done or t==num_steps:
                 break
@@ -150,6 +155,8 @@ class BeliefAgent:
             'states': np.array(states), # [0, t]
             'obss': np.array(obss), # [0, t]
             'beliefs': np.array(beliefs), # [0, t]
+            'optimalities': np.array(optimalities),
+            'fvus': np.array(fvus),
         }
         if query_states is not None:
             device = self.model.p_s.get_param_vec().device
@@ -269,20 +276,30 @@ class BeliefAgentFamily(BaseJob):
         try:
             epoch, ckpt = self.load_ckpt(config)
             eval_records = ckpt['eval_records']
-            agent_state = ckpt['agent_state']
-            agent.load_state_dict(tensor_dict(agent_state))
+            agent.load_state_dict(tensor_dict(ckpt['agent_state']))
             if verbose>0:
                 print(f"Checkpoint ({epoch}) loaded.")
         except:
             epoch = 0
             eval_records = {}
+            _, info = agent.model.reset(return_info=True)
+            ckpt = {
+                'p_s_o_est_stats': info['p_s_o_est_stats'],
+                'p_o_s_est_stats': info['p_o_s_est_stats'],
+            }
+        t_train, t_eval = None, None
         while epoch<num_epochs:
+            tic = time.time()
             agent.algo.learn(**config['learn_kwargs'], log_interval=None, reset_num_timesteps=False)
-            # TODO check algo loggers for info to save
+            toc = time.time()
+            t_train = toc-tic if t_train is None else 0.9*t_train+0.1*(toc-tic)
             epoch += 1
 
             if epoch%self.eval_interval==0:
+                tic = time.time()
                 eval_record = agent.evaluate()
+                toc = time.time()
+                t_eval = toc-tic if t_eval is None else 0.9*t_eval+0.1*(toc-tic)
                 eval_records[epoch] = eval_record
                 if verbose>0:
                     print("Epoch {}".format(progress_str(epoch, num_epochs)))
@@ -290,12 +307,16 @@ class BeliefAgentFamily(BaseJob):
                         np.mean(eval_record['returns']),
                         np.std(eval_record['returns']),
                     ))
+                    print("Belief update optimality {:.2%}".format(
+                        np.mean(eval_record['optimalities']),
+                    ))
+                    print('Average training time {}/epoch, evaluation time {}'.format(
+                        time_str(t_train), time_str(t_eval),
+                    ))
 
             if epoch%self.save_interval==0 or epoch==num_epochs:
-                ckpt = {
-                    'eval_records': eval_records,
-                    'agent_state': numpy_dict(agent.state_dict()),
-                }
+                ckpt['eval_records'] = eval_records
+                ckpt['agent_state'] = numpy_dict(agent.state_dict())
                 preview = {}
                 self.save_ckpt(config, epoch, ckpt, preview)
                 if verbose>0:
