@@ -4,7 +4,7 @@ from gym.spaces import Discrete, MultiDiscrete
 from typing import Optional, Union
 RandGen = np.random.Generator
 
-from jarvis.utils import flatten, nest
+from jarvis.utils import flatten, nest, fill_defaults
 
 
 class MultiBoxForaging(gym.Env):
@@ -19,6 +19,16 @@ class MultiBoxForaging(gym.Env):
     binomial distributions based on box state.
 
     """
+    D_ENV_SPEC = {
+        'boxes': {
+            'num_boxes': 2, 'num_shades': 5,
+            'p_appear': 0.2, 'p_vanish': 0.05,
+            'p_true': 0.8, 'p_false': 0.2,
+        },
+        'reward': {
+            'food': 10., 'move': (-1., -1., -0.5), 'fetch': -2.,
+        },
+    }
 
     def __init__(self,
         *,
@@ -31,10 +41,10 @@ class MultiBoxForaging(gym.Env):
         env_spec:
             Environment specification.
         rng:
-            Random generator.
+            Random generator or seed.
 
         """
-        self.env_spec = self._get_env_spec(**(env_spec or {}))
+        self.env_spec = fill_defaults(env_spec or {}, self.D_ENV_SPEC)
         self.num_boxes = self.env_spec['boxes']['num_boxes']
         for key in ['p_appear', 'p_vanish', 'p_true', 'p_false']:
             self.env_spec['boxes'][key] = self._get_array(self.env_spec['boxes'][key], self.num_boxes)
@@ -50,24 +60,6 @@ class MultiBoxForaging(gym.Env):
 
         self.rng = rng if isinstance(rng, RandGen) else np.random.default_rng(rng)
         self.reset()
-
-    @staticmethod
-    def _get_env_spec(**kwargs):
-        r"""Returns full environment specification."""
-        env_spec = flatten({
-            'boxes': {
-                'num_boxes': 2, 'num_shades': 5,
-                'p_appear': 0.2, 'p_vanish': 0.05,
-                'p_true': 0.8, 'p_false': 0.2,
-            },
-            'reward': {
-                'food': 10., 'move': (-1., -1., -0.5), 'fetch': -2.,
-            },
-        })
-        for key, val in flatten(kwargs).items():
-            if key in env_spec:
-                env_spec[key] = val
-        return nest(env_spec)
 
     @staticmethod
     def _get_array(val, n):
@@ -90,7 +82,7 @@ class MultiBoxForaging(gym.Env):
         ])
         return env_param
 
-    def update_env_spec(self, env_param):
+    def set_env_param(self, env_param):
         r"""Updates environment with parameters."""
         c_p, n_p = 0, self.num_boxes
         self.env_spec['boxes']['p_appear'] = env_param[c_p:c_p+n_p]
