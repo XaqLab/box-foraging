@@ -26,7 +26,8 @@ class MultiBoxForaging(gym.Env):
             'p_true': 0.8, 'p_false': 0.2,
         },
         'reward': {
-            'food': 10., 'move': (-1., -1., -0.5), 'fetch': -2.,
+            'food': 10., 'fetch': -2.,
+            'move_box': -1., 'move_center': -0.5,
         },
     }
 
@@ -48,7 +49,10 @@ class MultiBoxForaging(gym.Env):
         self.num_boxes = self.env_spec['boxes']['num_boxes']
         for key in ['p_appear', 'p_vanish', 'p_true', 'p_false']:
             self.env_spec['boxes'][key] = self._get_array(self.env_spec['boxes'][key], self.num_boxes)
-        self.env_spec['reward']['move'] = self._get_array(self.env_spec['reward']['move'], self.num_boxes+1)
+        self.env_spec['reward']['move'] = np.concatenate([
+            self._get_array(self.env_spec['reward']['move_box'], self.num_boxes),
+            np.array([self.env_spec['reward']['move_center']]),
+        ])
 
         self.state_space = MultiDiscrete( # box states and agent position
             [2]*self.num_boxes+[self.num_boxes+1]
@@ -152,3 +156,39 @@ class MultiBoxForaging(gym.Env):
             ))
         obs = (*cues, self.agent_loc)
         return obs
+
+
+class IdenticalBoxForaging(MultiBoxForaging):
+    r"""Identical boxes foraging experiment."""
+
+    def __init__(self,
+        *,
+        env_spec: Optional[dict] = None,
+        **kwargs,
+    ):
+        super(IdenticalBoxForaging, self).__init__(env_spec=env_spec, **kwargs)
+        for key in ['p_appear', 'p_vanish', 'p_true', 'p_false']:
+            assert len(np.unique(self.env_spec['boxes'][key]))==1
+
+    def get_env_param(self):
+        r"""Returns environment parameters."""
+        env_param = np.concatenate([
+            [
+                self.env_spec['boxes']['p_appear'][0],
+                self.env_spec['boxes']['p_vanish'][0],
+                self.env_spec['boxes']['p_true'][0],
+                self.env_spec['boxes']['p_false'][0],
+                self.env_spec['reward']['food'],
+            ],
+            self.env_spec['reward']['move'],
+        ])
+        return env_param
+
+    def set_env_param(self, env_param):
+        r"""Updates environment with parameters."""
+        self.env_spec['boxes']['p_appear'] = self._get_array(env_param[0], self.num_boxes)
+        self.env_spec['boxes']['p_vanish'] = self._get_array(env_param[1], self.num_boxes)
+        self.env_spec['boxes']['p_true'] = self._get_array(env_param[2], self.num_boxes)
+        self.env_spec['boxes']['p_false'] = self._get_array(env_param[3], self.num_boxes)
+        self.env_spec['reward']['food'] = env_param[4]
+        self.env_spec['reward']['move'] = env_param[5:(self.num_boxes+6)]
