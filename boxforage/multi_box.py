@@ -95,6 +95,7 @@ class MultiBoxForaging(gym.Env):
         c_p += n_p
         self.env_spec['reward']['food'] = env_param[c_p]
         c_p += 1
+        n_p = self.num_boxes+1
         self.env_spec['reward']['move'] = env_param[c_p:c_p+n_p]
 
     def get_state(self):
@@ -149,5 +150,5 @@ class MultiBoxForaging(gym.Env):
             cues.append(self.rng.binomial(
                 n=self.env_spec['boxes']['num_shades'], p=p,
             ))
-        obs = tuple(cues)
+        obs = (*cues, self.agent_loc)
         return obs
