@@ -31,6 +31,7 @@ if __name__=='__main__':
         obs_dist_kwargs={'idxs': [[0], [1], [2]]},
         eval_interval=2,
         save_interval=6,
+        s_pause=2., l_pause=10.,
     )
 
     env_params = []

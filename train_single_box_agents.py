@@ -6,6 +6,7 @@ if __name__=='__main__':
     bafam = BeliefAgentFamily(
         SingleBoxForaging,
         save_interval=5,
+        s_pause=2., l_pause=10.,
     )
 
     env_params = []
