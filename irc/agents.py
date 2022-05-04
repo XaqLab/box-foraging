@@ -76,7 +76,7 @@ class BeliefAgent:
         g = (w*rewards).sum()
         return g
 
-    def evaluate(self, num_episodes=20, num_steps=80):
+    def evaluate(self, num_episodes=10, num_steps=40):
         r"""Evaluates current policy with respect to internal model.
 
         Args
@@ -270,7 +270,7 @@ class BeliefAgentFamily(BaseJob):
         r"""Trains an agent."""
         agent = self.init_agent(config)
         if verbose>0:
-            print("Belief agent initiated for environment parameter:")
+            print("Belief agent initialized for environment parameter:")
             print("({})".format(', '.join(['{:g}'.format(p) for p in config['env_param']])))
 
         try:
@@ -282,7 +282,17 @@ class BeliefAgentFamily(BaseJob):
         except:
             epoch = 0
             eval_records = {}
+            tic = time.time()
             _, info = agent.model.reset(return_info=True)
+            toc = time.time()
+            if verbose>0:
+                print("Initial state distribution estimation optimality {:.1%}".format(
+                    info['p_s_o_est_stats']['optimality'],
+                ))
+                print("Conditional observation distribution estimation optimality {:.1%}".format(
+                    info['p_o_s_est_stats']['optimality'],
+                ))
+                print("{} elapsed.".format(time_str(toc-tic)))
             ckpt = {
                 'p_s_o_est_stats': info['p_s_o_est_stats'],
                 'p_o_s_est_stats': info['p_o_s_est_stats'],
@@ -307,7 +317,7 @@ class BeliefAgentFamily(BaseJob):
                         np.mean(eval_record['returns']),
                         np.std(eval_record['returns']),
                     ))
-                    print("Belief update optimality {:.2%}".format(
+                    print("Belief update optimality {:.1%}".format(
                         np.mean(eval_record['optimalities']),
                     ))
                     print('Average training time {}/epoch, evaluation time {}'.format(
