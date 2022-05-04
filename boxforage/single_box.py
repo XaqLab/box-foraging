@@ -20,7 +20,7 @@ class SingleBoxForaging(gym.Env):
     """
     D_ENV_SPEC = {
         'box': {
-            'num_shades': 3, 'p_appear': 0.2, 'p_cue': 0.8,
+            'num_shades': 5, 'p_appear': 0.2, 'p_cue': 0.8,
         },
         'reward': {
             'food': 10., 'fetch': -1.,

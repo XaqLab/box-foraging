@@ -19,21 +19,21 @@ class BeliefModel(gym.Env):
     """
     D_EST_SPEC = { # default specification for distribution estimation
         'state_prior': {
-            'num_samples': 100,
+            'num_samples': 2000,
             'optim_kwargs': {
-                'batch_size': 32, 'num_epochs': 10,
+                'batch_size': 64, 'num_epochs': 10,
                 'lr': 0.01, 'momentum': 0.9, 'weight_decay': 1e-4,
             },
         },
         'obs_conditional': {
-            'num_samples': 100,
+            'num_samples': 2000,
             'optim_kwargs': {
-                'batch_size': 32, 'num_epochs': 10,
+                'batch_size': 64, 'num_epochs': 10,
                 'lr': 0.01, 'momentum': 0.9, 'weight_decay': 1e-4,
             },
         },
         'belief': {
-            'num_samples': 20,
+            'num_samples': 200,
             'optim_kwargs': {
                 'batch_size': 16, 'num_epochs': 5,
                 'lr': 0.01, 'momentum': 0.9, 'weight_decay': 1e-4,
