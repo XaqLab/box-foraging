@@ -42,22 +42,6 @@ class BeliefAgent:
         self.algo = algo
         self.gamma = gamma
 
-    def episode_likelihood(self,
-        actions: Array,
-        obss: Array,
-    ):
-        r"""Returns the likelihood of given episode.
-
-        Args
-        ----
-        actions:
-            Actions taken by the agent, in [0, t).
-        obss:
-            Observations to the agent, in [0, t]. The last one will not be used.
-
-        """
-        raise NotImplementedError
-
     def state_dict(self):
         r"""Returns state dictionary."""
         return {
@@ -179,6 +163,48 @@ class BeliefAgent:
         with torch.no_grad():
             probs = np.exp(self.model.p_s.loglikelihood(states).cpu().numpy())
         return probs
+
+    def episode_likelihood(self,
+        actions: Array,
+        obss: Array,
+        num_repeats: int = 4,
+    ):
+        r"""Returns the likelihood of given episode.
+
+        Args
+        ----
+        actions:
+            Actions taken by the agent, in [0, t).
+        obss:
+            Observations to the agent, in [0, t]. The last one will not be used.
+        num_repeats:
+            The number of sampled belief trajectories.
+
+        Returns
+        -------
+        logps: (num_repeats,) Array
+            Log likelihood p(actions, obss|model) for each sampled belief
+            trajectory.
+
+        """
+        num_steps = len(actions)
+        logps = np.zeros((num_repeats, num_steps))
+        device = self.model.p_s.get_param_vec().device
+        self.algo.policy.eval().to(device)
+        for i in range(num_repeats):
+            for t in range(len(actions)):
+                obs = obss[t]
+                if t==0:
+                    with torch.no_grad():
+                        self.model.p_s.set_param_vec(
+                            self.model.p_s_o.param_net(np.array(obs)[None])[0]
+                        )
+                else:
+                    self.model.update_belief(actions[t-1], obs)
+                belief = self.model.p_s.get_param_vec()
+                pi = self.algo.policy.get_distribution(belief[None].to(device))
+                logps[i, t] = pi.log_prob(torch.tensor(actions[t], dtype=torch.long, device=device)).item()
+        return logps.sum(axis=1)
 
 
 class BeliefAgentFamily(BaseJob):
