@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 import gym
 
 from typing import Optional, Type, Union
@@ -189,7 +190,11 @@ class BeliefModel(gym.Env):
         if env is None:
             env = self.env
         obs = env.reset()
-        belief = self.p_s_o.param_net(np.array(obs)[None])[0].data.cpu().numpy()
+        with torch.no_grad():
+            self.p_s.set_param_vec(
+                self.p_s_o.param_net(np.array(obs)[None])[0]
+            )
+        belief = self.p_s.get_param_vec().cpu().numpy()
         if return_info:
             info = {
                 'obs': obs, 'state': env.get_state(),
