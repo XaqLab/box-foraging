@@ -383,7 +383,7 @@ class BeliefAgentFamily(BaseJob):
 
     def optimal_agent(self,
         env_param: Array,
-        num_epochs: int = 40,
+        num_epochs: int = 0,
         verbose: int = 0,
     ):
         r"""Returns the optimal agent of given environment parameter."""
