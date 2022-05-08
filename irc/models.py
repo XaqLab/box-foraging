@@ -4,7 +4,7 @@ import gym
 
 from typing import Optional, Type, Union
 from gym.spaces import MultiDiscrete, Box
-from jarvis.utils import fill_defaults
+from jarvis.utils import fill_defaults, numpy_dict, tensor_dict
 
 from .distributions import BaseDistribution, DiscreteDistribution
 from .utils import Tensor, RandGen, GymEnv
@@ -48,9 +48,10 @@ class BeliefModel(gym.Env):
         state_dist_kwargs: Optional[dict] = None,
         obs_dist_class: Optional[Type[BaseDistribution]] = None,
         obs_dist_kwargs: Optional[dict] = None,
+        est_spec: Optional[dict] = None,
         p_s_o: Optional[BaseDistribution] = None,
         p_o_s: Optional[BaseDistribution] = None,
-        est_spec: Optional[dict] = None,
+        device: str = 'cuda',
         rng: Union[RandGen, int, None] = None,
     ):
         r"""
@@ -67,14 +68,16 @@ class BeliefModel(gym.Env):
         obs_dist_class, obs_dist_kwargs:
             Class and key word arguments for observation distribution, used for
             conditional distribution p(o|s).
+        est_spec:
+            Estimation specifications.
         p_s_o:
             Prior distribution of state given initial observation. If not
             provided, it will be estimated using assumed environment `env`.
         p_o_s:
             Conditional distribution of observation. If not provided, it will be
             estimated using assumed environment `env`.
-        est_spec:
-            Estimation specifications.
+        device:
+            Tensor device.
         rng:
             Random seed or generator.
 
@@ -87,25 +90,31 @@ class BeliefModel(gym.Env):
         self.obs_dist_class = obs_dist_class or self._get_default_dist_class(self.env.observation_space)
         self.obs_dist_kwargs = obs_dist_kwargs or {}
 
-        self.p_s = self.state_dist_class(self.env.state_space, **self.state_dist_kwargs)
+        self.est_spec = fill_defaults(est_spec or {}, self.D_EST_SPEC)
+        self.device = device if torch.cuda.is_available() else 'cpu'
+        self.rng = rng if isinstance(rng, RandGen) else np.random.default_rng(rng)
+
+        self.p_s = self.state_dist_class(self.env.state_space, rng=self.rng, **self.state_dist_kwargs)
+        self.p_s.to(self.device)
         self.belief_space = Box(-np.inf, np.inf, shape=self.p_s.get_param_vec().shape)
         self.observation_space = self.belief_space
 
+        self._to_est_p_s_o = p_s_o is None
         self.p_s_o = p_s_o or self.state_dist_class(
             x_space=self.env.state_space, y_space=self.env.observation_space,
-            **self.state_dist_kwargs,
+            rng=self.rng, **self.state_dist_kwargs,
             )
+        self.p_s_o.to(self.device)
         assert self.p_s_o.x_space==self.env.state_space and self.p_s_o.y_space==self.env.observation_space
         assert len(self.p_s_o.get_param_vec())==len(self.p_s.get_param_vec())
+
+        self._to_est_p_o_s = p_o_s is None
         self.p_o_s = p_o_s or self.obs_dist_class(
             x_space=self.env.observation_space, y_space=self.env.state_space,
-            **self.obs_dist_kwargs,
+            rng=self.rng, **self.obs_dist_kwargs,
             )
+        self.p_o_s.to(self.device)
         assert self.p_o_s.x_space==self.env.observation_space and self.p_o_s.y_space==self.env.state_space
-
-        self.to_estimate = True
-        self.est_spec = fill_defaults(est_spec or {}, self.D_EST_SPEC)
-        self.rng = rng if isinstance(rng, RandGen) else np.random.default_rng(rng)
 
     @staticmethod
     def _get_default_dist_class(space):
@@ -154,16 +163,17 @@ class BeliefModel(gym.Env):
     def state_dict(self):
         r"""Returns state dictionary."""
         state = {
-            'p_s_o_state': self.p_s_o.state_dict(),
-            'p_o_s_state': self.p_o_s.state_dict(),
+            'p_s_o_state': numpy_dict(self.p_s_o.state_dict()),
+            'p_o_s_state': numpy_dict(self.p_o_s.state_dict()),
         }
         return state
 
     def load_state_dict(self, state):
         r"""Loads state dictionary."""
-        self.p_s_o.load_state_dict(state['p_s_o_state'])
-        self.p_o_s.load_state_dict(state['p_o_s_state'])
-        self.to_estimate = False
+        self.p_s_o.load_state_dict(tensor_dict(state['p_s_o_state'], self.device))
+        self._to_est_p_s_o = False
+        self.p_o_s.load_state_dict(tensor_dict(state['p_o_s_state'], self.device))
+        self._to_est_p_o_s = False
 
     def reset(self, env=None, return_info=False):
         r"""Resets the environment.
@@ -179,21 +189,21 @@ class BeliefModel(gym.Env):
         -------
         belief: Array
             Parameter of initial belief.
-        obs: Array
-            Initial observation.
+        info: dict
+            Auxiliary information including initial observation and state.
 
         """
-        if self.to_estimate:
+        if self._to_est_p_s_o:
             self.estimate_state_prior()
+            self._to_est_p_s_o = False
+        if self._to_est_p_o_s:
             self.estimate_obs_conditional()
-            self.to_estimate = False
+            self._to_est_p_o_s = False
         if env is None:
             env = self.env
         obs = env.reset()
         with torch.no_grad():
-            self.p_s.set_param_vec(
-                self.p_s_o.param_net(np.array(obs)[None])[0]
-            )
+            self.p_s.set_param_vec(self.p_s_o.param_net(np.array(obs)[None])[0])
         belief = self.p_s.get_param_vec().cpu().numpy()
         if return_info:
             info = {

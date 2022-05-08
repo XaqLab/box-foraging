@@ -1,4 +1,5 @@
 import time
+import random
 import pickle
 import numpy as np
 import torch
@@ -226,6 +227,7 @@ class BeliefAgentFamily(BaseJob):
         obs_dist_kwargs: Optional[dict] = None,
         algo_class: Optional[Type[SB3Algo]] = None,
         algo_kwargs: Optional[dict] = None,
+        gamma: float = 0.99,
         policy_class: Optional[Type[SB3Policy]] = None,
         policy_kwargs: Optional[dict] = None,
         learn_kwargs: Optional[dict] = None,
@@ -246,13 +248,14 @@ class BeliefAgentFamily(BaseJob):
         self.algo_kwargs = algo_kwargs or {}
         self.algo_kwargs['policy'] = policy_class or ActorCriticPolicy
         self.algo_kwargs['policy_kwargs'] = policy_kwargs or {}
+        self.algo_kwargs['gamma'] = gamma
         self.algo_kwargs = fill_defaults(self.algo_kwargs, {'n_steps': 64, 'batch_size': 16})
         self.learn_kwargs = learn_kwargs or {}
         self.learn_kwargs = fill_defaults(self.learn_kwargs, {'total_timesteps': 256})
 
         self.eval_interval = eval_interval
         self.save_interval = save_interval
-        self.device = torch.device(device) if torch.cuda.is_available() else torch.device('cpu')
+        self.device = device if torch.cuda.is_available() else 'cpu'
 
         self.catalog_path = f'{self.store_dir}/class_catalog.pickle'
         self._register()
@@ -293,19 +296,29 @@ class BeliefAgentFamily(BaseJob):
                 config[key] = self.catalog[val]
         return nest(config)
 
-    def init_agent(self, config):
-        r"""Returns a new agent."""
+    def create_agent(self, config):
+        r"""Creates a new agent."""
         config = self._raw_config(config)
         env = config['env_class'](**config['env_kwargs'])
+        try:
+            env.seed(config['seed'])
+        except:
+            pass # seeding is not implemented
         env.set_env_param(config['env_param'])
-        model = BeliefModel(env=env, **config['model_kwargs'])
-        algo = config['algo_class'](env=model, **config['algo_kwargs'])
-        agent = BeliefAgent(model, algo)
+        model = BeliefModel(
+            env=env, device=self.device, rng=config['seed'],
+            **config['model_kwargs'],
+        )
+        algo = config['algo_class'](
+            env=model, device=self.device, seed=config['seed'],
+            **config['algo_kwargs'],
+        )
+        agent = BeliefAgent(model, algo, gamma=config['algo_kwargs']['gamma'])
         return agent
 
     def main(self, config, num_epochs=40, verbose=1):
         r"""Trains an agent."""
-        agent = self.init_agent(config)
+        agent = self.create_agent(config)
         if verbose>0:
             print("Belief agent initialized for environment parameter:")
             print("({})".format(', '.join(['{:g}'.format(p) for p in config['env_param']])))
@@ -369,17 +382,24 @@ class BeliefAgentFamily(BaseJob):
                 if verbose>0:
                     print(f"Checkpoint {epoch} saved.")
 
-    def to_config(self, env_param):
+    def to_config(self, env_param, seed=0):
         r"""Converts environment parameter to configuration."""
-        return to_hashable(dict(env_param=env_param, **self._config))
+        return to_hashable(dict(env_param=env_param, seed=seed, **self._config))
 
     def train_agents(self,
         env_params: Iterable[Array],
+        seeds: Optional[Iterable[int]] = None,
         **kwargs,
     ):
         r"""Train agents for a list of environment parameters."""
-        configs = (self.to_config(env_param) for env_param in env_params)
-        self.batch(configs, **kwargs)
+        if seeds is None:
+            seeds = [0]
+        def configs():
+            for env_param in env_params:
+                seed = random.choice(seeds)
+                config = self.to_config(env_param, seed)
+                yield config
+        self.batch(configs(), **kwargs)
 
     def optimal_agent(self,
         env_param: Array,
@@ -390,6 +410,6 @@ class BeliefAgentFamily(BaseJob):
         self.train_agents([env_param], num_epochs=num_epochs, verbose=verbose, patience=0)
         config = self.to_config(env_param)
         _, ckpt = self.load_ckpt(config)
-        agent = self.init_agent(config)
+        agent = self.create_agent(config)
         agent.load_state_dict(tensor_dict(ckpt['agent_state']))
         return agent
