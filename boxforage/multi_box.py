@@ -112,6 +112,10 @@ class MultiBoxForaging(gym.Env):
         self.has_foods = state[:-1]
         self.agent_loc = state[-1]
 
+    def seed(self, seed):
+        r"""Sets random generator."""
+        self.rng = np.random.default_rng(seed)
+
     def reset(self):
         self.has_foods = tuple(self.rng.choice(2, self.num_boxes))
         self.agent_loc = self.rng.choice(self.num_boxes+1)
