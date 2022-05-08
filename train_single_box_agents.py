@@ -1,18 +1,33 @@
-import random
+import argparse, json, random
+from itertools import product
 from irc.agents import BeliefAgentFamily
 from boxforage.single_box import SingleBoxForaging
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--eval-interval', default=5, type=int)
+parser.add_argument('--save-interval', default=5, type=int)
+parser.add_argument('--envs-spec-path', default='jsons/single_box_envs.json')
+parser.add_argument('--max-seed', default=6, type=int)
+parser.add_argument('--num-epochs', default=40, type=int)
+parser.add_argument('--num-works', default=1, type=int)
+args = parser.parse_args()
 
 if __name__=='__main__':
     bafam = BeliefAgentFamily(
         SingleBoxForaging,
-        save_interval=5,
-        s_path_len=3, s_pause=2., l_pause=10.,
+        eval_interval=args.eval_interval,
+        save_interval=args.save_interval,
     )
 
-    env_params = []
-    for p_appear in [0.05, 0.1, 0.15, 0.2, 0.25, 0.3]:
-        for p_cue in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
-            for r_food in [2, 5, 10]:
-                env_params.append((p_appear, p_cue, r_food))
+    with open(args.envs_spec_path, 'r') as f:
+        envs_spec = json.load(f)
+    env_params = list(product(
+        envs_spec['p_appear'], envs_spec['p_cue'], envs_spec['r_food'],
+    ))
     random.shuffle(env_params)
-    bafam.train_agents(env_params, num_epochs=30, verbose=1)
+
+    bafam.train_agents(
+        env_params, seeds=range(args.max_seed),
+        num_epochs=args.num_epochs,
+        num_works=args.num_works, verbose=1,
+    )
