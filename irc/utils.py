@@ -4,12 +4,14 @@ import torch
 from typing import Optional, Union
 from gym import Env as GymEnv
 from gym.spaces import MultiDiscrete, Box
-from stable_baselines3.common.base_class import BaseAlgorithm as SB3Algo
+from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
+from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 from stable_baselines3.common.policies import BasePolicy as SB3Policy
 
 Array = np.ndarray
 Tensor = torch.Tensor
 VarSpace = Union[MultiDiscrete, Box]
+SB3Algo = Union[OnPolicyAlgorithm, OffPolicyAlgorithm]
 RandGen = np.random.Generator
 
 
