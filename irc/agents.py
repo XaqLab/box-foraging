@@ -320,7 +320,7 @@ class BeliefAgentFamily(BaseJob):
         r"""Trains an agent."""
         agent = self.create_agent(config)
         if verbose>0:
-            print("Belief agent initialized for environment parameter:")
+            print("Belief agent (seed {}) initialized for environment parameter:".format(config['seed']))
             print("({})".format(', '.join(['{:g}'.format(p) for p in config['env_param']])))
 
         try:
