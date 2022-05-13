@@ -64,7 +64,7 @@ def plot_single_box_episode(agent, env=None, num_steps=40, figsize=(10, 1.5)):
     ax.set_yticks([])
     ax.set_xlabel('Time')
     figs.append(fig)
-    return figs
+    return episode, figs
 
 def plot_multi_box_episode(agent, env=None, num_steps=40, figsize=(10, 1.5)):
     episode = agent.run_one_episode(env, num_steps)
@@ -142,4 +142,4 @@ def plot_multi_box_episode(agent, env=None, num_steps=40, figsize=(10, 1.5)):
     ax.set_yticklabels([f'Box {i}' for i in range(num_boxes)])
     ax.set_xlabel('Time')
     figs.append(fig)
-    return figs
+    return episode, figs
