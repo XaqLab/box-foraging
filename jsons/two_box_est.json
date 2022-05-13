@@ -1,0 +1,23 @@
+{
+    "state_prior": {
+        "num_samples": 20000,
+        "optim_kwargs": {
+            "batch_size": 128,
+            "num_epochs": 40
+        }
+    },
+    "obs_conditional": {
+        "num_samples": 20000,
+        "optim_kwargs": {
+            "batch_size": 128,
+            "num_epochs": 40
+        }
+    },
+    "belief": {
+        "num_samples": 800,
+        "optim_kwargs": {
+            "batch_size": 64,
+            "num_epochs": 10
+        }
+    }
+}

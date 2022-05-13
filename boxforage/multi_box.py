@@ -76,19 +76,20 @@ class MultiBoxForaging(gym.Env):
 
     def get_env_param(self):
         r"""Returns environment parameters."""
-        env_param = np.concatenate([
+        env_param = tuple(np.concatenate([
             self.env_spec['boxes']['p_appear'],
             self.env_spec['boxes']['p_vanish'],
             self.env_spec['boxes']['p_true'],
             self.env_spec['boxes']['p_false'],
             [self.env_spec['reward']['food']],
             self.env_spec['reward']['move'],
-        ])
+        ]))
         return env_param
 
     def set_env_param(self, env_param):
         r"""Updates environment with parameters."""
         c_p, n_p = 0, self.num_boxes
+        env_param = np.array(env_param)
         self.env_spec['boxes']['p_appear'] = env_param[c_p:c_p+n_p]
         c_p += n_p
         self.env_spec['boxes']['p_vanish'] = env_param[c_p:c_p+n_p]
@@ -176,7 +177,7 @@ class IdenticalBoxForaging(MultiBoxForaging):
 
     def get_env_param(self):
         r"""Returns environment parameters."""
-        env_param = np.concatenate([
+        env_param = tuple(np.concatenate([
             [
                 self.env_spec['boxes']['p_appear'][0],
                 self.env_spec['boxes']['p_vanish'][0],
@@ -185,7 +186,7 @@ class IdenticalBoxForaging(MultiBoxForaging):
                 self.env_spec['reward']['food'],
             ],
             self.env_spec['reward']['move'],
-        ])
+        ]))
         return env_param
 
     def set_env_param(self, env_param):
