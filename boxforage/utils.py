@@ -2,8 +2,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-def plot_single_box_episode(agent, env=None, num_steps=40, figsize=(10, 1.5)):
-    episode = agent.run_one_episode(env, num_steps)
+def plot_single_box_episode(agent, env=None, episode=None, num_steps=40, figsize=(10, 1.5)):
+    if episode is None:
+        episode = agent.run_one_episode(env, num_steps)
     num_steps = episode['num_steps']
     states = episode['states']
     obss = episode['obss']
@@ -66,7 +67,9 @@ def plot_single_box_episode(agent, env=None, num_steps=40, figsize=(10, 1.5)):
     figs.append(fig)
     return episode, figs
 
-def plot_multi_box_episode(agent, env=None, num_steps=40, figsize=(10, 1.5)):
+def plot_multi_box_episode(agent, env=None, episode=None, num_steps=40, figsize=(10, 1.5)):
+    if episode is None:
+        episode = agent.run_one_episode(env, num_steps)
     episode = agent.run_one_episode(env, num_steps)
     num_boxes = agent.model.env.num_boxes
     num_steps = episode['num_steps']
