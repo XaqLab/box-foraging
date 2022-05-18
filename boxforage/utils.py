@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
 
 def plot_single_box_episode(agent, env=None, episode=None, num_steps=40, figsize=(10, 1.5)):
     if episode is None:
