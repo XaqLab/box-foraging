@@ -3,21 +3,21 @@ from itertools import product
 from irc.agents import BeliefAgentFamily
 from boxforage.multi_box import IdenticalBoxForaging
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--store-dir', default='cache')
-parser.add_argument('--num-boxes', default=2, type=int)
-parser.add_argument('--eval-interval', default=5, type=int)
-parser.add_argument('--save-interval', default=5, type=int)
-parser.add_argument('--envs-spec-path', default='jsons/multi_box_envs.json')
-parser.add_argument('--est-spec-path', default='jsons/two_box_est.json')
-parser.add_argument('--max-seed', default=6, type=int)
-parser.add_argument('--max-wait', default=1., type=float)
-parser.add_argument('--num-epochs', default=40, type=int)
-parser.add_argument('--num-works', default=1, type=int)
-parser.add_argument('--patience', default=168., type=float)
-args = parser.parse_args()
-
 if __name__=='__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--store-dir', default='cache')
+    parser.add_argument('--num-boxes', default=2, type=int)
+    parser.add_argument('--eval-interval', default=5, type=int)
+    parser.add_argument('--save-interval', default=5, type=int)
+    parser.add_argument('--envs-spec-path', default='jsons/multi_box_envs.json')
+    parser.add_argument('--est-spec-path', default='jsons/two_box_est.json')
+    parser.add_argument('--max-seed', default=6, type=int)
+    parser.add_argument('--max-wait', default=1., type=float)
+    parser.add_argument('--num-epochs', default=40, type=int)
+    parser.add_argument('--num-works', default=1, type=int)
+    parser.add_argument('--patience', default=168., type=float)
+    args = parser.parse_args()
+
     time.sleep(random.random()*args.max_wait)
     env_spec = {'boxes': {'num_boxes': args.num_boxes}}
     with open(args.est_spec_path, 'r') as f:
