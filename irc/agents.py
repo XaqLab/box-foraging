@@ -111,11 +111,19 @@ class BeliefAgent:
         _to_restore_train = self.algo.policy.training # policy will be set to evaluation mode temporarily
         self.algo.policy.set_training_mode(False)
         actions, rewards, states, obss, beliefs = [], [], [], [], []
+        try:
+            q_states = np.array(self.model.env.query_states())
+            q_probs = []
+        except:
+            q_probs = None
         optimalities, fvus = [], []
+
         belief, info = self.model.reset(return_info=True)
         states.append(info['state'])
         obss.append(info['obs'])
         beliefs.append(belief)
+        if q_probs is not None:
+            q_probs.append(self.query_probs(belief, q_states))
         t = 0
         while True:
             action, _ = self.algo.predict(belief)
@@ -125,6 +133,8 @@ class BeliefAgent:
             states.append(info['state'])
             obss.append(info['obs'])
             beliefs.append(belief)
+            if q_probs is not None:
+                q_probs.append(self.query_probs(belief, q_states))
             optimalities.append(self.model.p_s.est_stats['optimality'])
             fvus.append(self.model.p_s.est_stats['fvu'])
             t += 1
@@ -140,6 +150,9 @@ class BeliefAgent:
             'optimalities': np.array(optimalities),
             'fvus': np.array(fvus),
         }
+        if q_probs is not None:
+            episode['q_states'] = q_states
+            episode['q_probs'] = np.array(q_probs)
         self.algo.policy.set_training_mode(_to_restore_train)
         return episode
 
@@ -150,7 +163,7 @@ class BeliefAgent:
         ----
         belief: (num_vars_belief)
             Parameters of state distribution.
-        query_states: (num_samples, num_vars_state)
+        states: (num_samples, num_vars_state)
             Queried states.
 
         Returns
@@ -403,12 +416,13 @@ class BeliefAgentFamily(BaseJob):
 
     def optimal_agent(self,
         env_param: Array,
+        seed: int = 0,
         num_epochs: int = 0,
         verbose: int = 0,
     ):
         r"""Returns the optimal agent of given environment parameter."""
-        self.train_agents([env_param], num_epochs=num_epochs, verbose=verbose, patience=0)
-        config = self.to_config(env_param)
+        config = self.to_config(env_param, seed=seed)
+        self.main(config, num_epochs, verbose)
         _, ckpt = self.load_ckpt(config)
         agent = self.create_agent(config)
         agent.load_state_dict(tensor_dict(ckpt['agent_state']))

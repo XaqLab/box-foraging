@@ -277,7 +277,7 @@ class BeliefModel(gym.Env):
             weights.append(np.exp(self.p_o_s.loglikelihood(
                 np.array(obs)[None], np.array(next_state)[None]).item()))
         self.env.set_state(_state_to_restore)
-        self.p_s.estimate( # TODO add running statistics for inspection
+        self.p_s.estimate(
             xs=np.array(states), ws=np.array(weights), verbose=0,
             **self.est_spec['belief']['optim_kwargs'],
         )

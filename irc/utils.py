@@ -16,6 +16,16 @@ RandGen = np.random.Generator
 
 
 def loss_summary(losses: Array, e_idxs: Optional[Array] = None):
+    r"""Returns summary of training.
+
+    An exponential decay function is fit to the sequence of losses. `optimality`
+    is a number in [0, 1], it estimates how close is the final training towards
+    equilibrium. Low `optimality` suggests more training epochs are needed.
+    `fvu` is a number in [0, 1], it estimates how noisy the true losses are
+    compared to the best exponential fit. High `fvu` suggests bigger batches or
+    smaller learning rates are needed.
+
+    """
     def exp_decay(x, a, b, k):
         y = a*np.exp(-k*x)+b
         return y
