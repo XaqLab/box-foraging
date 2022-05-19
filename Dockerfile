@@ -1,4 +1,4 @@
-FROM zheli21/pytorch:1.11.0-cp39-cuda113-2004 AS base
+FROM zheli21/pytorch:1.11.0-cp310-cuda115-2204 AS base
 RUN python -m pip install -U stable-baselines3
 
 FROM base as git-repos
