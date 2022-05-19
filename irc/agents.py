@@ -329,7 +329,13 @@ class BeliefAgentFamily(BaseJob):
         agent = BeliefAgent(model, algo, gamma=config['algo_kwargs']['gamma'])
         return agent
 
-    def main(self, config, num_epochs=40, verbose=1):
+    def main(self, config, num_epochs, verbose=1):
+        if 'episode_path' in config:
+            self.compute_logp(config, verbose)
+        else:
+            self.train_agent(config, num_epochs, verbose)
+
+    def train_agent(self, config, num_epochs=40, verbose=1):
         r"""Trains an agent."""
         agent = self.create_agent(config)
         if verbose>0:
@@ -395,9 +401,41 @@ class BeliefAgentFamily(BaseJob):
                 if verbose>0:
                     print(f"Checkpoint {epoch} saved.")
 
-    def to_config(self, env_param, seed=0):
+    def compute_logp(self, config, verbose):
+        min_num_epochs = config['min_num_epochs']
+        _config = dict(
+            (key, val) for key, val in config.items()
+            if key not in ['episode_path', 'min_num_epochs', 'num_repeats']
+        )
+        self.train_agent(_config, min_num_epochs, verbose)
+        agent = self.create_agent(_config)
+        _, ckpt = self.load_ckpt(_config)
+        agent.load_state_dict(tensor_dict(ckpt['agent_state']))
+        if verbose>0:
+            print(f"Agent trained for at least {min_num_epochs} epochs loaded.")
+
+        episode_path = config['episode_path']
+        with open(episode_path, 'rb') as f:
+            episode = pickle.load(f)['episode']
+        actions = episode['actions']
+        obss = episode['obss']
+        logps = agent.episode_likelihood(actions, obss, config['num_repeats'])
+        if verbose>0:
+            print("Log likelihoods of episode (length {}) is calculated for {} belief sequences.".format(
+                len(actions), config['num_repeats'],
+            ))
+
+        ckpt, preview = {'logps': logps}, {}
+        self.save_ckpt(config, 1, ckpt, preview)
+
+    def to_config(self, env_param, seed=0, **kwargs):
         r"""Converts environment parameter to configuration."""
-        return to_hashable(dict(env_param=env_param, seed=seed, **self._config))
+        return to_hashable(dict(env_param=env_param, seed=seed, **self._config, **kwargs))
+
+    def _random_configs(self, env_params, seeds, **kwargs):
+        for env_param in env_params:
+            for seed in random.sample(seeds, len(seeds)):
+                yield self.to_config(env_param, seed, **kwargs)
 
     def train_agents(self,
         env_params: Iterable[Array],
@@ -407,12 +445,24 @@ class BeliefAgentFamily(BaseJob):
         r"""Train agents for a list of environment parameters."""
         if seeds is None:
             seeds = [0]
-        def configs():
-            for env_param in env_params:
-                seed = random.choice(seeds)
-                config = self.to_config(env_param, seed)
-                yield config
-        self.batch(configs(), **kwargs)
+        self.batch(self._random_configs(env_params, seeds), **kwargs)
+
+    def compute_logps(self,
+        env_params: Iterable[Array],
+        episode_path: str,
+        seeds: Optional[Iterable[int]] = None,
+        min_num_epochs: int = 1,
+        num_repeats: int = 8,
+        **kwargs,
+    ):
+        if seeds is None:
+            seeds = [0]
+        self.batch(
+            self._random_configs(
+                env_params, seeds, episode_path=episode_path,
+                min_num_epochs=min_num_epochs, num_repeats=num_repeats,
+            ), num_epochs=1, **kwargs,
+        )
 
     def optimal_agent(self,
         env_param: Array,
