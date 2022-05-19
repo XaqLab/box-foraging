@@ -73,6 +73,10 @@ class SingleBoxForaging(gym.Env):
         r"""Sets environment state."""
         self.has_food, = state
 
+    def query_states(self):
+        r"""Query states for visualization."""
+        return [(1,)]
+
     def seed(self, seed):
         r"""Sets random generator."""
         self.rng = np.random.default_rng(seed)

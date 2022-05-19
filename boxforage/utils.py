@@ -1,15 +1,16 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-def plot_single_box_episode(agent, env=None, episode=None, num_steps=40, figsize=(10, 1.5)):
-    if episode is None:
-        episode = agent.run_one_episode(env, num_steps)
+def plot_single_box_episode(episode, num_shades=None, figsize=(10, 1.5)):
     num_steps = episode['num_steps']
     states = episode['states']
     obss = episode['obss']
     actions = episode['actions']
     rewards = episode['rewards']
-    beliefs = episode['beliefs']
+    assert np.all(episode['q_states']==np.array([(1,)]))
+    probs = episode['q_probs']
+    if num_shades is None:
+        num_shades = obss.max()
 
     fig_w, fig_h = figsize
     aspect = num_steps*fig_h/fig_w*1.5
@@ -29,7 +30,6 @@ def plot_single_box_episode(agent, env=None, episode=None, num_steps=40, figsize
     ax.set_xlabel('Time')
     figs.append(fig)
 
-    num_shades = agent.model.env.env_spec['box']['num_shades']
     fig, ax = plt.subplots(figsize=figsize)
     h = ax.imshow(
         obss.T, aspect=aspect, extent=[-0.5, num_steps+0.5, -0.5, 0.5],
@@ -48,10 +48,6 @@ def plot_single_box_episode(agent, env=None, episode=None, num_steps=40, figsize
     ax.set_xlabel('Time')
     figs.append(fig)
 
-    probs = np.zeros((num_steps+1, 1))
-    for t, belief in enumerate(beliefs):
-        _states = np.array([(1,)])
-        probs[t] = agent.query_probs(belief, _states)[0]
     fig, ax = plt.subplots(figsize=figsize)
     h = ax.imshow(
         probs.T, aspect=aspect, extent=[-0.5, num_steps+0.5, -0.5, 0.5],
@@ -64,7 +60,7 @@ def plot_single_box_episode(agent, env=None, episode=None, num_steps=40, figsize
     ax.set_yticks([])
     ax.set_xlabel('Time')
     figs.append(fig)
-    return episode, figs
+    return figs
 
 def plot_multi_box_episode(agent, env=None, episode=None, num_steps=40, figsize=(10, 1.5)):
     if episode is None:
