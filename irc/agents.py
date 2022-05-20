@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from typing import Optional, Type
 from collections.abc import Iterable
+from scipy.special import logsumexp
 from stable_baselines3.ppo import PPO
 from stable_baselines3.common.policies import ActorCriticPolicy
 from jarvis import BaseJob
@@ -415,14 +416,15 @@ class BeliefAgentFamily(BaseJob):
             print(f"Agent trained for at least {min_num_epochs} epochs loaded.")
 
         episode_path = config['episode_path']
+        num_repeats = config['num_repeats']
         with open(episode_path, 'rb') as f:
             episode = pickle.load(f)['episode']
         actions = episode['actions']
         obss = episode['obss']
-        logps = agent.episode_likelihood(actions, obss, config['num_repeats'])
+        logps = agent.episode_likelihood(actions, obss, num_repeats)
         if verbose>0:
-            print("Log likelihoods of episode (length {}) is calculated for {} belief sequences.".format(
-                len(actions), config['num_repeats'],
+            print("Log likelihoods {:.2f} of episode (length {}) is calculated for {} belief sequences.".format(
+                logsumexp(logps)-np.log(num_repeats), len(actions), num_repeats,
             ))
 
         ckpt, preview = {'logps': logps}, {}
