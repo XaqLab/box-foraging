@@ -484,3 +484,22 @@ class BeliefAgentFamily(BaseJob):
         agent = self.create_agent(config)
         agent.load_state_dict(tensor_dict(ckpt['agent_state']))
         return agent
+
+    def episode_likelihood(self,
+        env_param: Array,
+        episode_path: str,
+        num_repeats: int = 8,
+        seeds: Optional[Iterable[int]] = None,
+        num_epochs: int = 40,
+    ):
+        if seeds is None:
+            seeds = [0]
+        logps = []
+        for seed in seeds:
+            config = self.to_config(
+                env_param=env_param, seed=seed,
+                episode_path=episode_path, num_repeats=num_repeats,
+            )
+            logps.append(self.compute_logp(config, num_epochs=num_epochs, verbose=0))
+        logps = np.array(logps)
+        return logps
