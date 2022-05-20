@@ -459,18 +459,16 @@ class BeliefAgentFamily(BaseJob):
     def compute_logps(self,
         env_params: Iterable[Array],
         episode_path: str,
-        seeds: Optional[Iterable[int]] = None,
-        min_num_epochs: int = 1,
         num_repeats: int = 8,
+        seeds: Optional[Iterable[int]] = None,
         **kwargs,
     ):
         if seeds is None:
             seeds = [0]
         self.batch(
             self._random_configs(
-                env_params, seeds, episode_path=episode_path,
-                min_num_epochs=min_num_epochs, num_repeats=num_repeats,
-            ), num_epochs=1, **kwargs,
+                env_params, seeds, episode_path=episode_path, num_repeats=num_repeats,
+            ), **kwargs,
         )
 
     def optimal_agent(self,
