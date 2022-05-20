@@ -7,7 +7,7 @@ if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--store-dir', default='cache')
     parser.add_argument('--envs-spec-path', default='jsons/single_box_envs.json')
-    parser.add_argument('--episode-path', default='cache/episodes/single_box_example.pickle')
+    parser.add_argument('--episode-path', default='episodes/single_box_example.pickle')
     parser.add_argument('--max-seed', default=6, type=int)
     parser.add_argument('--min-num-epochs', default=40, type=int)
     parser.add_argument('--num-repeats', default=8, type=int)

@@ -332,7 +332,7 @@ class BeliefAgentFamily(BaseJob):
 
     def main(self, config, num_epochs, verbose=1):
         if 'episode_path' in config:
-            self.compute_logp(config, verbose)
+            self.compute_logp(config, num_epochs, verbose)
         else:
             self.train_agent(config, num_epochs, verbose)
 
@@ -402,33 +402,40 @@ class BeliefAgentFamily(BaseJob):
                 if verbose>0:
                     print(f"Checkpoint {epoch} saved.")
 
-    def compute_logp(self, config, verbose):
-        min_num_epochs = config['min_num_epochs']
-        _config = dict(
-            (key, val) for key, val in config.items()
-            if key not in ['episode_path', 'min_num_epochs', 'num_repeats']
-        )
-        self.train_agent(_config, min_num_epochs, verbose)
-        agent = self.create_agent(_config)
-        _, ckpt = self.load_ckpt(_config)
-        agent.load_state_dict(tensor_dict(ckpt['agent_state']))
-        if verbose>0:
-            print(f"Agent trained for at least {min_num_epochs} epochs loaded.")
+    def compute_logp(self, config, num_epochs, verbose):
+        try:
+            epoch, ckpt = self.load_ckpt(config)
+        except:
+            epoch = 0
+        if epoch<num_epochs:
+            _config = dict( # create new config for agent training, `config` is not modified
+                (key, val) for key, val in config.items()
+                if key not in ['episode_path', 'num_repeats']
+            )
+            self.train_agent(_config, num_epochs, verbose)
+            agent = self.create_agent(_config)
+            _, ckpt = self.load_ckpt(_config)
+            agent.load_state_dict(tensor_dict(ckpt['agent_state']))
+            if verbose>0:
+                print(f"Agent trained for at least {num_epochs} epochs loaded.")
 
-        episode_path = config['episode_path']
-        num_repeats = config['num_repeats']
-        with open(episode_path, 'rb') as f:
-            episode = pickle.load(f)['episode']
-        actions = episode['actions']
-        obss = episode['obss']
-        logps = agent.episode_likelihood(actions, obss, num_repeats)
-        if verbose>0:
-            print("Log likelihoods {:.2f} of episode (length {}) is calculated for {} belief sequences.".format(
-                logsumexp(logps)-np.log(num_repeats), len(actions), num_repeats,
-            ))
+            episode_path = config['episode_path']
+            num_repeats = config['num_repeats']
+            with open(f'{self.store_dir}/{episode_path}', 'rb') as f:
+                episode = pickle.load(f)['episode']
+            actions = episode['actions']
+            obss = episode['obss']
+            if verbose>0:
+                print("Data loaded.")
+            logps = agent.episode_likelihood(actions, obss, num_repeats)
+            if verbose>0:
+                print("Log likelihoods {:.2f} of episode (length {}) is calculated for {} belief sequences.".format(
+                    logsumexp(logps)-np.log(num_repeats), len(actions), num_repeats,
+                ))
 
-        ckpt, preview = {'logps': logps}, {}
-        self.save_ckpt(config, 1, ckpt, preview)
+            ckpt, preview = {'logps': logps}, {}
+            self.save_ckpt(config, num_epochs, ckpt, preview)
+        return ckpt['logps']
 
     def to_config(self, env_param, seed=0, **kwargs):
         r"""Converts environment parameter to configuration."""
