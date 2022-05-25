@@ -503,7 +503,7 @@ class BaseDistribution(torch.nn.Module):
             if verbose>1 and (b_idx%(-(-num_batches//6))==0 or b_idx==num_batches):
                 print("{} {:.3f}".format(
                     progress_str(b_idx, num_batches), loss.item()
-                    ))
+                ))
         toc = time.time()
         optimality, fvu = loss_summary(np.array(losses))
         self.est_stats = {
@@ -516,6 +516,7 @@ class BaseDistribution(torch.nn.Module):
             print("{} epochs trained on {} samples, log likelihood {:.3f} ({})".format(
                 num_epochs, num_samples, -loss.item(), time_str(toc-tic),
             ))
+        return losses
 
 
 class DiscreteDistribution(BaseDistribution):

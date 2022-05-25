@@ -124,7 +124,7 @@ class BeliefModel(gym.Env):
             raise NotImplementedError
         raise RuntimeError(f"Default class for {space} is not defined.")
 
-    def estimate_state_prior(self):
+    def estimate_state_prior(self, verbose=0):
         r"""Estimates initial belief."""
         # use env to collect initial states
         _state_to_restore = self.env.get_state()
@@ -134,13 +134,15 @@ class BeliefModel(gym.Env):
             states.append(self.env.get_state())
             obss.append(obs)
         self.env.set_state(_state_to_restore)
+        if verbose>0:
+            print(f"{len(states)} states collected")
         # estimate the initial belief
-        self.p_s_o.estimate(
-            np.array(states), np.array(obss), verbose=0,
+        return self.p_s_o.estimate(
+            np.array(states), np.array(obss), verbose=verbose,
             **self.est_spec['state_prior']['optim_kwargs'],
         )
 
-    def estimate_obs_conditional(self):
+    def estimate_obs_conditional(self, verbose=0):
         r"""Estimates conditional distribution of observation."""
         # use env to collect state/observation pairs
         _state_to_restore = self.env.get_state()
@@ -154,11 +156,13 @@ class BeliefModel(gym.Env):
             obss.append(obs)
             states.append(self.env.get_state())
         self.env.set_state(_state_to_restore)
+        if verbose>0:
+            print(f"{len(obss)} observations collected")
         # estimate the conditional distribution
-        self.p_o_s.estimate(
-            np.array(obss), np.array(states), verbose=0,
+        return self.p_o_s.estimate(
+            np.array(obss), np.array(states), verbose=verbose,
             **self.est_spec['obs_conditional']['optim_kwargs'],
-            )
+        )
 
     def state_dict(self):
         r"""Returns state dictionary."""
@@ -277,7 +281,7 @@ class BeliefModel(gym.Env):
             weights.append(np.exp(self.p_o_s.loglikelihood(
                 np.array(obs)[None], np.array(next_state)[None]).item()))
         self.env.set_state(_state_to_restore)
-        self.p_s.estimate(
+        return self.p_s.estimate(
             xs=np.array(states), ws=np.array(weights), verbose=0,
             **self.est_spec['belief']['optim_kwargs'],
         )
