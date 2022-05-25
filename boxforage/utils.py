@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from itertools import product
 
 def plot_single_box_episode(episode, num_shades=None, figsize=(10, 1.5)):
     num_steps = episode['num_steps']
@@ -7,7 +8,7 @@ def plot_single_box_episode(episode, num_shades=None, figsize=(10, 1.5)):
     obss = episode['obss']
     actions = episode['actions']
     rewards = episode['rewards']
-    assert np.all(episode['q_states']==np.array([(1,)]))
+    assert not np.any(episode['q_states']-np.array([(1,)]))
     probs = episode['q_probs']
     if num_shades is None:
         num_shades = obss.max()
@@ -20,7 +21,7 @@ def plot_single_box_episode(episode, num_shades=None, figsize=(10, 1.5)):
     h = ax.imshow(
         states.T, aspect=aspect, extent=[-0.5, num_steps+0.5, -0.5, 0.5],
         vmin=0, vmax=1, origin='lower', cmap='coolwarm',
-        )
+    )
     cbar = plt.colorbar(h, label='Has food')
     cbar.set_ticks([0, 1])
     cbar.set_ticklabels(['F', 'T'])
@@ -34,7 +35,7 @@ def plot_single_box_episode(episode, num_shades=None, figsize=(10, 1.5)):
     h = ax.imshow(
         obss.T, aspect=aspect, extent=[-0.5, num_steps+0.5, -0.5, 0.5],
         vmin=0, vmax=num_shades, origin='lower', cmap='coolwarm',
-        )
+    )
     cbar = plt.colorbar(h, label='Color cue')
     cbar.set_ticks([0, num_shades])
     idxs = (actions==1)&(rewards>0)
@@ -52,7 +53,7 @@ def plot_single_box_episode(episode, num_shades=None, figsize=(10, 1.5)):
     h = ax.imshow(
         probs.T, aspect=aspect, extent=[-0.5, num_steps+0.5, -0.5, 0.5],
         vmin=0, vmax=1, origin='lower', cmap='coolwarm',
-        )
+    )
     cbar = plt.colorbar(h, label='Belief')
     cbar.set_ticks([0, 1])
     ax.set_xlim([-0.5, num_steps+0.5])
@@ -62,17 +63,18 @@ def plot_single_box_episode(episode, num_shades=None, figsize=(10, 1.5)):
     figs.append(fig)
     return figs
 
-def plot_multi_box_episode(agent, env=None, episode=None, num_steps=40, figsize=(10, 1.5)):
-    if episode is None:
-        episode = agent.run_one_episode(env, num_steps)
-    episode = agent.run_one_episode(env, num_steps)
-    num_boxes = agent.model.env.num_boxes
+def plot_multi_box_episode(episode, num_shades=None, figsize=(10, 1.5)):
+    num_boxes = episode['states'].shape[1]-1
     num_steps = episode['num_steps']
     states = episode['states']
     obss = episode['obss']
     actions = episode['actions']
     rewards = episode['rewards']
-    beliefs = episode['beliefs']
+    has_foods = np.array(list(product(range(2), repeat=num_boxes)))
+    assert not np.any(episode['q_states'][..., :2]-has_foods)
+    q_probs = episode['q_probs']
+    if num_shades is None:
+        num_shades = obss.max()
 
     fig_w, fig_h = figsize
     figs = []
@@ -93,7 +95,6 @@ def plot_multi_box_episode(agent, env=None, episode=None, num_steps=40, figsize=
     ax.set_xlabel('Time')
     figs.append(fig)
 
-    num_shades = agent.model.env.env_spec['boxes']['num_shades']
     aspect = num_steps/(num_boxes+1)*fig_h/fig_w*1.5
     fig, ax = plt.subplots(figsize=figsize)
     h = ax.imshow(
@@ -118,20 +119,16 @@ def plot_multi_box_episode(agent, env=None, episode=None, num_steps=40, figsize=
     ax.set_xlabel('Time')
     figs.append(fig)
 
-    has_foods = np.stack(np.unravel_index(np.arange(2**num_boxes), [2]*num_boxes)).T
     probs = np.zeros((num_steps+1, num_boxes))
-    for t, belief in enumerate(beliefs):
-        agent_loc = states[t, -1]
-        _states = np.concatenate([has_foods, np.ones((len(has_foods), 1), dtype=int)*agent_loc], axis=1)
-        _prob = agent.query_probs(belief, _states)
-        for b_idx in range(num_boxes):
-            probs[t, b_idx] += _prob[has_foods[:, b_idx]==1].sum()
+    for b_idx in range(num_boxes):
+        idxs = has_foods[:, b_idx]==1
+        probs[:, b_idx] = q_probs[:, idxs].sum(axis=1)
     aspect = num_steps/num_boxes*fig_h/fig_w*1.5
     fig, ax = plt.subplots(figsize=figsize)
     h = ax.imshow(
         probs.T, aspect=aspect, extent=[-0.5, num_steps+0.5, -0.5, num_boxes-0.5],
         vmin=0, vmax=1, origin='lower', cmap='coolwarm',
-        )
+    )
     cbar = plt.colorbar(h, label='Belief')
     cbar.set_ticks([0, 1])
     ax.set_xlim([-0.5, num_steps+0.5])
@@ -140,4 +137,4 @@ def plot_multi_box_episode(agent, env=None, episode=None, num_steps=40, figsize=
     ax.set_yticklabels([f'Box {i}' for i in range(num_boxes)])
     ax.set_xlabel('Time')
     figs.append(fig)
-    return episode, figs
+    return figs

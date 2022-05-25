@@ -1,10 +1,11 @@
+from itertools import product
 import numpy as np
 import gym
 from gym.spaces import Discrete, MultiDiscrete
 from typing import Optional, Union
 RandGen = np.random.Generator
 
-from jarvis.utils import flatten, nest, fill_defaults
+from jarvis.utils import fill_defaults
 
 
 class MultiBoxForaging(gym.Env):
@@ -112,6 +113,12 @@ class MultiBoxForaging(gym.Env):
         r"""Sets environment state."""
         self.has_foods = state[:-1]
         self.agent_loc = state[-1]
+
+    def query_states(self):
+        return [
+            (*has_foods, self.agent_loc) for has_foods in
+            product(range(2), repeat=self.num_boxes)
+        ]
 
     def seed(self, seed):
         r"""Sets random generator."""

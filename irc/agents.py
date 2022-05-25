@@ -114,6 +114,7 @@ class BeliefAgent:
         actions, rewards, states, obss, beliefs = [], [], [], [], []
         try:
             q_states = np.array(self.model.env.query_states())
+            q_states = []
             q_probs = []
         except:
             q_probs = None
@@ -124,7 +125,8 @@ class BeliefAgent:
         obss.append(info['obs'])
         beliefs.append(belief)
         if q_probs is not None:
-            q_probs.append(self.query_probs(belief, q_states))
+            q_states.append(np.array(self.model.env.query_states()))
+            q_probs.append(self.query_probs(belief, q_states[-1]))
         t = 0
         while True:
             action, _ = self.algo.predict(belief)
@@ -135,7 +137,8 @@ class BeliefAgent:
             obss.append(info['obs'])
             beliefs.append(belief)
             if q_probs is not None:
-                q_probs.append(self.query_probs(belief, q_states))
+                q_states.append(np.array(self.model.env.query_states()))
+                q_probs.append(self.query_probs(belief, q_states[-1]))
             optimalities.append(self.model.p_s.est_stats['optimality'])
             fvus.append(self.model.p_s.est_stats['fvu'])
             t += 1
@@ -152,7 +155,7 @@ class BeliefAgent:
             'fvus': np.array(fvus),
         }
         if q_probs is not None:
-            episode['q_states'] = q_states
+            episode['q_states'] = np.array(q_states)
             episode['q_probs'] = np.array(q_probs)
         self.algo.policy.set_training_mode(_to_restore_train)
         return episode
