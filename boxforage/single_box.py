@@ -4,7 +4,7 @@ from gym.spaces import Discrete, MultiDiscrete
 from typing import Optional, Union
 RandGen = np.random.Generator
 
-from jarvis.utils import fill_defaults
+from jarvis.config import Config
 
 
 class SingleBoxForaging(gym.Env):
@@ -41,7 +41,7 @@ class SingleBoxForaging(gym.Env):
             Random generator or seed.
 
         """
-        self.env_spec = fill_defaults(env_spec or {}, self.D_ENV_SPEC)
+        self.env_spec = Config(env_spec).fill(self.D_ENV_SPEC)
         self.state_space = MultiDiscrete([2]) # box state
         self.action_space = Discrete(2) # wait and fetch
         self.observation_space = MultiDiscrete([self.env_spec['box']['num_shades']+1]) # color cue

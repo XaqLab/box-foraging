@@ -5,7 +5,7 @@ from gym.spaces import Discrete, MultiDiscrete
 from typing import Optional, Union
 RandGen = np.random.Generator
 
-from jarvis.utils import fill_defaults
+from jarvis.config import Config
 
 
 class MultiBoxForaging(gym.Env):
@@ -46,7 +46,7 @@ class MultiBoxForaging(gym.Env):
             Random generator or seed.
 
         """
-        self.env_spec = fill_defaults(env_spec or {}, self.D_ENV_SPEC)
+        self.env_spec = Config(env_spec).fill(self.D_ENV_SPEC)
         self.num_boxes = self.env_spec['boxes']['num_boxes']
         for key in ['p_appear', 'p_vanish', 'p_true', 'p_false']:
             self.env_spec['boxes'][key] = self._get_array(self.env_spec['boxes'][key], self.num_boxes)
