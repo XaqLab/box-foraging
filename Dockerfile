@@ -1,5 +1,5 @@
 FROM zheli21/pytorch:1.12.1-cp39-cuda116-2004 AS base
-RUN python -m pip install -U stable-baselines3
+RUN python -m pip install -U pip stable-baselines3
 
 FROM base as git-repos
 RUN mkdir /root/.ssh/
