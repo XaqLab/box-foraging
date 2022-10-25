@@ -3,7 +3,7 @@ from irc.manager import IRCManager
 
 config = Config({
     'env_param': None, 'seed': None, 'num_epochs': 12,
-    'defaults': 'configs/single_box.yaml',
+    'defaults': 'defaults/single_box.yaml',
     'device': 'cpu',
 })
 
