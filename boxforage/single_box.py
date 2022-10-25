@@ -26,39 +26,39 @@ class SingleBoxForaging(GymEnv):
 
     def __init__(self,
         *,
-        env_spec: Optional[dict] = None,
+        spec: Optional[dict] = None,
         rng: Union[RandGen, int, None] = None,
     ):
         r"""
         Args
         ----
-        env_spec:
+        spec:
             Environment specification.
         rng:
             Random generator or seed.
 
         """
-        self.env_spec = Config(env_spec).fill(D_ENV_SPEC)
+        self.spec = Config(spec).fill(D_ENV_SPEC)
         self.state_space = MultiDiscrete([2]) # box state
         self.action_space = Discrete(2) # wait and fetch
-        self.observation_space = MultiDiscrete([self.env_spec.box.num_shades+1]) # color cue
+        self.observation_space = MultiDiscrete([self.spec.box.num_shades+1]) # color cue
 
         self.rng = rng if isinstance(rng, RandGen) else np.random.default_rng(rng)
 
     def get_env_param(self):
         r"""Returns environment parameters."""
         env_param = (
-            self.env_spec.box.p_appear,
-            self.env_spec.box.p_cue,
-            self.env_spec.reward.food,
+            self.spec.box.p_appear,
+            self.spec.box.p_cue,
+            self.spec.reward.food,
         )
         return env_param
 
     def set_env_param(self, env_param):
         r"""Updates environment with parameters."""
-        self.env_spec.box.p_appear = env_param[0]
-        self.env_spec.box.p_cue = env_param[1]
-        self.env_spec.reward.food = env_param[2]
+        self.spec.box.p_appear = env_param[0]
+        self.spec.box.p_cue = env_param[1]
+        self.spec.reward.food = env_param[2]
 
     def get_state(self):
         r"""Returns environment state."""
@@ -90,20 +90,20 @@ class SingleBoxForaging(GymEnv):
         r"""Runs one transition step."""
         reward, terminated = 0., False
         if action==0: # wait
-            if self.has_food==0 and self.rng.random()<self.env_spec.box.p_appear:
+            if self.has_food==0 and self.rng.random()<self.spec.box.p_appear:
                 self.has_food = 1
         else: # fetch
-            reward += self.env_spec.reward.fetch
+            reward += self.spec.reward.fetch
             if self.has_food==1:
-                reward += self.env_spec.reward.food
+                reward += self.spec.reward.food
                 self.has_food = 0
         return reward, terminated
 
     def observe_step(self):
         r"""Runs one observation step."""
         color = self.rng.binomial(
-            self.env_spec.box.num_shades,
-            self.env_spec.box.p_cue if self.has_food==1 else 1-self.env_spec.box.p_cue,
+            self.spec.box.num_shades,
+            self.spec.box.p_cue if self.has_food==1 else 1-self.spec.box.p_cue,
         )
         observation = (color,)
         return observation

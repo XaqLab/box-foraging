@@ -29,27 +29,27 @@ class MultiBoxForaging(GymEnv):
 
     def __init__(self,
         *,
-        env_spec: Optional[dict] = None,
+        spec: Optional[dict] = None,
         rng: Union[RandGen, int, None] = None,
     ):
         r"""
         Args
         ----
-        env_spec:
+        spec:
             Environment specification.
         rng:
             Random generator or seed.
 
         """
-        self.env_spec = Config(env_spec).fill(D_ENV_SPEC)
-        self.num_boxes = self.env_spec.boxes.num_boxes
+        self.spec = Config(spec).fill(D_ENV_SPEC)
+        self.num_boxes = self.spec.boxes.num_boxes
         for key in ['p_appear', 'p_vanish', 'p_true', 'p_false']:
-            self.env_spec.boxes[key] = self._get_array(
-                self.env_spec.boxes[key], self.num_boxes,
+            self.spec.boxes[key] = self._get_array(
+                self.spec.boxes[key], self.num_boxes,
             )
-        self.env_spec.reward.move = np.concatenate([
-            self._get_array(self.env_spec.reward.pop('move_box'), self.num_boxes),
-            np.array([self.env_spec.reward.pop('move_center')]),
+        self.spec.reward.move = np.concatenate([
+            self._get_array(self.spec.reward.pop('move_box'), self.num_boxes),
+            np.array([self.spec.reward.pop('move_center')]),
         ])
 
         self.state_space = MultiDiscrete( # box states and agent position
@@ -57,7 +57,7 @@ class MultiBoxForaging(GymEnv):
         )
         self.action_space = Discrete(self.num_boxes+2) # move and fetch
         self.observation_space = MultiDiscrete( # color cues and agent position
-            [self.env_spec.boxes.num_shades+1]*self.num_boxes+[self.num_boxes+1]
+            [self.spec.boxes.num_shades+1]*self.num_boxes+[self.num_boxes+1]
         )
 
         self.rng = rng if isinstance(rng, RandGen) else np.random.default_rng(rng)
@@ -75,12 +75,12 @@ class MultiBoxForaging(GymEnv):
     def get_env_param(self):
         r"""Returns environment parameters."""
         env_param = tuple(np.concatenate([
-            self.env_spec.boxes.p_appear,
-            self.env_spec.boxes.p_vanish,
-            self.env_spec.boxes.p_true,
-            self.env_spec.boxes.p_false,
-            [self.env_spec.reward.food],
-            self.env_spec.reward.move,
+            self.spec.boxes.p_appear,
+            self.spec.boxes.p_vanish,
+            self.spec.boxes.p_true,
+            self.spec.boxes.p_false,
+            [self.spec.reward.food],
+            self.spec.reward.move,
         ]))
         return env_param
 
@@ -88,18 +88,18 @@ class MultiBoxForaging(GymEnv):
         r"""Updates environment with parameters."""
         c_p, n_p = 0, self.num_boxes
         env_param = np.array(env_param)
-        self.env_spec.boxes.p_appear = env_param[c_p:c_p+n_p]
+        self.spec.boxes.p_appear = env_param[c_p:c_p+n_p]
         c_p += n_p
-        self.env_spec.boxes.p_vanish = env_param[c_p:c_p+n_p]
+        self.spec.boxes.p_vanish = env_param[c_p:c_p+n_p]
         c_p += n_p
-        self.env_spec.boxes.p_true = env_param[c_p:c_p+n_p]
+        self.spec.boxes.p_true = env_param[c_p:c_p+n_p]
         c_p += n_p
-        self.env_spec.boxes.p_false = env_param[c_p:c_p+n_p]
+        self.spec.boxes.p_false = env_param[c_p:c_p+n_p]
         c_p += n_p
-        self.env_spec.reward.food = env_param[c_p]
+        self.spec.reward.food = env_param[c_p]
         c_p += 1
         n_p = self.num_boxes+1
-        self.env_spec.reward.move = env_param[c_p:c_p+n_p]
+        self.spec.reward.move = env_param[c_p:c_p+n_p]
 
     def get_state(self):
         r"""Returns environment state."""
@@ -136,17 +136,17 @@ class MultiBoxForaging(GymEnv):
         _has_foods = list(self.has_foods)
         if action<=self.num_boxes: # 'MOVE'
             self.agent_loc = action
-            reward += self.env_spec.reward.move[self.agent_loc]
+            reward += self.spec.reward.move[self.agent_loc]
             for b_idx in range(self.num_boxes): # box state change
-                if _has_foods[b_idx]==0 and self.rng.random()<self.env_spec.boxes.p_appear[b_idx]:
+                if _has_foods[b_idx]==0 and self.rng.random()<self.spec.boxes.p_appear[b_idx]:
                     _has_foods[b_idx] = 1
-                if _has_foods[b_idx]==1 and self.rng.random()<self.env_spec.boxes.p_vanish[b_idx]:
+                if _has_foods[b_idx]==1 and self.rng.random()<self.spec.boxes.p_vanish[b_idx]:
                     _has_foods[b_idx] = 0
         else: # 'FETCH'
-            reward += self.env_spec.reward.fetch
+            reward += self.spec.reward.fetch
             if self.agent_loc<self.num_boxes and _has_foods[self.agent_loc]==1:
                 _has_foods[self.agent_loc] = 0
-                reward += self.env_spec.reward.food
+                reward += self.spec.reward.food
         self.has_foods = tuple(_has_foods)
         return reward, terminated
 
@@ -155,11 +155,11 @@ class MultiBoxForaging(GymEnv):
         cues = []
         for b_idx in range(self.num_boxes):
             if self.has_foods[b_idx]==1:
-                p = self.env_spec.boxes.p_true[b_idx]
+                p = self.spec.boxes.p_true[b_idx]
             else:
-                p = self.env_spec.boxes.p_false[b_idx]
+                p = self.spec.boxes.p_false[b_idx]
             cues.append(self.rng.binomial(
-                n=self.env_spec.boxes.num_shades, p=p,
+                n=self.spec.boxes.num_shades, p=p,
             ))
         observation = (*cues, self.agent_loc)
         return observation
@@ -173,29 +173,29 @@ class IdenticalBoxForaging(MultiBoxForaging):
         env_spec: Optional[dict] = None,
         **kwargs,
     ):
-        super(IdenticalBoxForaging, self).__init__(env_spec=env_spec, **kwargs)
+        super(IdenticalBoxForaging, self).__init__(spec=env_spec, **kwargs)
         for key in ['p_appear', 'p_vanish', 'p_true', 'p_false']:
-            assert len(np.unique(self.env_spec.boxes[key]))==1
+            assert len(np.unique(self.spec.boxes[key]))==1
 
     def get_env_param(self):
         r"""Returns environment parameters."""
         env_param = tuple(np.concatenate([
             [
-                self.env_spec.boxes.p_appear[0],
-                self.env_spec.boxes.p_vanish[0],
-                self.env_spec.boxes.p_true[0],
-                self.env_spec.boxes.p_false[0],
-                self.env_spec.reward.food,
+                self.spec.boxes.p_appear[0],
+                self.spec.boxes.p_vanish[0],
+                self.spec.boxes.p_true[0],
+                self.spec.boxes.p_false[0],
+                self.spec.reward.food,
             ],
-            self.env_spec.reward.move,
+            self.spec.reward.move,
         ]))
         return env_param
 
     def set_env_param(self, env_param):
         r"""Updates environment with parameters."""
-        self.env_spec.boxes.p_appear = self._get_array(env_param[0], self.num_boxes)
-        self.env_spec.boxes.p_vanish = self._get_array(env_param[1], self.num_boxes)
-        self.env_spec.boxes.p_true = self._get_array(env_param[2], self.num_boxes)
-        self.env_spec.boxes.p_false = self._get_array(env_param[3], self.num_boxes)
-        self.env_spec.reward.food = env_param[4]
-        self.env_spec.reward.move = env_param[5:(self.num_boxes+6)]
+        self.spec.boxes.p_appear = self._get_array(env_param[0], self.num_boxes)
+        self.spec.boxes.p_vanish = self._get_array(env_param[1], self.num_boxes)
+        self.spec.boxes.p_true = self._get_array(env_param[2], self.num_boxes)
+        self.spec.boxes.p_false = self._get_array(env_param[3], self.num_boxes)
+        self.spec.reward.food = env_param[4]
+        self.spec.reward.move = env_param[5:(self.num_boxes+6)]
