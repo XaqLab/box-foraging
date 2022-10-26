@@ -7,6 +7,7 @@ config = Config({
     'seeds': None,
     'num_epochs': 12,
     'count': 6,
+    'patience': 1.,
     'defaults': 'defaults/single_box.yaml',
     'device': 'cpu',
 })
@@ -20,9 +21,10 @@ if __name__=='__main__':
     seeds = config.pop('seeds')
     num_epochs = config.pop('num_epochs')
     count = config.pop('count')
+    patience = config.pop('patience')
 
     manager = IRCManager(**config)
     manager.train_agents(
         env_param_grid=env_param_grid, seeds=seeds,
-        num_epochs=num_epochs, count=count,
+        num_epochs=num_epochs, count=count, patience=patience,
     )
