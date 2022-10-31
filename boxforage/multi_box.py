@@ -122,7 +122,8 @@ class MultiBoxForaging(GymEnv):
         self.agent_loc = self.rng.choice(self.num_boxes+1)
         self.rng = np.random.default_rng(seed)
         observation = self.observe_step()
-        return observation
+        info = {}
+        return observation, info
 
     def step(self, action):
         reward, terminated = self.transition_step(action)
@@ -170,10 +171,10 @@ class IdenticalBoxForaging(MultiBoxForaging):
 
     def __init__(self,
         *,
-        env_spec: Optional[dict] = None,
+        spec: Optional[dict] = None,
         **kwargs,
     ):
-        super(IdenticalBoxForaging, self).__init__(spec=env_spec, **kwargs)
+        super(IdenticalBoxForaging, self).__init__(spec=spec, **kwargs)
         for key in ['p_appear', 'p_vanish', 'p_true', 'p_false']:
             assert len(np.unique(self.spec.boxes[key]))==1
 
@@ -187,7 +188,7 @@ class IdenticalBoxForaging(MultiBoxForaging):
                 self.spec.boxes.p_false[0],
                 self.spec.reward.food,
             ],
-            self.spec.reward.move,
+            self.spec.reward.move[-2:],
         ]))
         return env_param
 
@@ -198,4 +199,4 @@ class IdenticalBoxForaging(MultiBoxForaging):
         self.spec.boxes.p_true = self._get_array(env_param[2], self.num_boxes)
         self.spec.boxes.p_false = self._get_array(env_param[3], self.num_boxes)
         self.spec.reward.food = env_param[4]
-        self.spec.reward.move = env_param[5:(self.num_boxes+6)]
+        self.spec.reward.move = np.array([env_param[5]]*self.num_boxes+[env_param[6]])
