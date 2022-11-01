@@ -10,15 +10,15 @@ agent:
     estimate:
       p_s:
         num_samples: 1000
-        num_epochs: 10
+        num_epochs: 2
         batch_size: 32
         optimizer:
           lr: 0.05
       p_s_o:
-        num_samples: 5000
+        num_samples: 10000
         num_epochs: 100
       p_o_s:
-        num_samples: 5000
+        num_samples: 10000
         num_epochs: 100
   learn:
     total_timesteps: 256
