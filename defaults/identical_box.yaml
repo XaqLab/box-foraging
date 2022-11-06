@@ -4,9 +4,14 @@ agent:
     param: [0.2, 0.05, 0.8, 0.2, 10., -1., -0.5]
     spec:
       boxes:
+        num_boxes: 2
         num_shades: 5
   model:
-    distribution: {}
+    distribution:
+      p_s:
+        idxs: [[0], [1], [2]]
+      p_o_s:
+        idxs: [[0], [1], [2]]
     estimate:
       p_s:
         num_samples: 1000
@@ -20,5 +25,3 @@ agent:
       p_o_s:
         num_samples: 10000
         num_epochs: 100
-  learn:
-    total_timesteps: 256

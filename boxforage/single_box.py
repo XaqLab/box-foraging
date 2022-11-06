@@ -1,18 +1,19 @@
 from pathlib import Path
 import yaml
 import numpy as np
+import gym
 from gym.spaces import Discrete, MultiDiscrete
 from typing import Optional, Union
 
 from jarvis.config import Config
 
-from .alias import GymEnv, RandGen
+from .alias import RandGen
 
 
 with open(Path(__file__).parent/'defaults.yaml') as f:
     D_ENV_SPEC = Config(yaml.safe_load(f)).single_box
 
-class SingleBoxForaging(GymEnv):
+class SingleBoxForaging(gym.Env):
     r"""Single box foraging environment.
 
     A minimal example of foraging experiment. Food will exist in a single box
@@ -35,7 +36,7 @@ class SingleBoxForaging(GymEnv):
         spec:
             Environment specification.
         rng:
-            Random generator or seed.
+            Random number generator or seed.
 
         """
         self.spec = Config(spec).fill(D_ENV_SPEC)

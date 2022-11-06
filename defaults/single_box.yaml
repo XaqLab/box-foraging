@@ -10,9 +10,7 @@ agent:
     estimate:
       p_s:
         num_samples: 1000
-        num_epochs: 10
-        batch_size: 32
+        num_epochs: 5
+        batch_size: 64
         optimizer:
           lr: 0.05
-  learn:
-    total_timesteps: 256

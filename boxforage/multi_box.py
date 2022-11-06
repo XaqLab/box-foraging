@@ -2,19 +2,19 @@ from pathlib import Path
 import yaml
 from itertools import product
 import numpy as np
+import gym
 from gym.spaces import Discrete, MultiDiscrete
 from typing import Optional, Union
-RandGen = np.random.Generator
 
-from jarvis.config import Config
+from jarvis import Config
 
-from .alias import GymEnv, RandGen
+from .alias import RandGen
 
 
 with open(Path(__file__).parent/'defaults.yaml') as f:
     D_ENV_SPEC = Config(yaml.safe_load(f)).multi_box
 
-class MultiBoxForaging(GymEnv):
+class MultiBoxForaging(gym.Env):
     r"""Multiple boxes foraging experiment.
 
     Multiple boxes are placed in the room, and food can appear or vanish at
@@ -38,7 +38,7 @@ class MultiBoxForaging(GymEnv):
         spec:
             Environment specification.
         rng:
-            Random generator or seed.
+            Random number generator or seed.
 
         """
         self.spec = Config(spec).fill(D_ENV_SPEC)
@@ -177,6 +177,7 @@ class IdenticalBoxForaging(MultiBoxForaging):
         super(IdenticalBoxForaging, self).__init__(spec=spec, **kwargs)
         for key in ['p_appear', 'p_vanish', 'p_true', 'p_false']:
             assert len(np.unique(self.spec.boxes[key]))==1
+        assert len(np.unique(self.spec.reward.move[:-1]))==1
 
     def get_env_param(self):
         r"""Returns environment parameters."""
