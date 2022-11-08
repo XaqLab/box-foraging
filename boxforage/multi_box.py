@@ -12,7 +12,7 @@ from .alias import RandGen
 
 
 with open(Path(__file__).parent/'defaults.yaml') as f:
-    D_ENV_SPEC = Config(yaml.safe_load(f)).multi_box
+    D_SPEC = Config(yaml.safe_load(f))
 
 class MultiBoxForaging(gym.Env):
     r"""Multiple boxes foraging experiment.
@@ -41,7 +41,7 @@ class MultiBoxForaging(gym.Env):
             Random number generator or seed.
 
         """
-        self.spec = Config(spec).fill(D_ENV_SPEC)
+        self.spec = Config(spec).fill(D_SPEC.multi_box)
         self.num_boxes = self.spec.boxes.num_boxes
         for key in ['p_appear', 'p_vanish', 'p_true', 'p_false']:
             self.spec.boxes[key] = self._get_array(
@@ -61,7 +61,6 @@ class MultiBoxForaging(gym.Env):
         )
 
         self.rng = rng if isinstance(rng, RandGen) else np.random.default_rng(rng)
-        self.reset()
 
     @staticmethod
     def _get_array(val, n):
@@ -118,9 +117,10 @@ class MultiBoxForaging(gym.Env):
         ]
 
     def reset(self, seed=None):
-        self.has_foods = tuple(self.rng.choice(2, self.num_boxes))
+        if seed is not None:
+            self.rng = np.random.default_rng(seed)
+        self.has_foods = self.rng.choice(2, self.num_boxes)
         self.agent_loc = self.rng.choice(self.num_boxes+1)
-        self.rng = np.random.default_rng(seed)
         observation = self.observe_step()
         info = {}
         return observation, info
@@ -134,21 +134,19 @@ class MultiBoxForaging(gym.Env):
     def transition_step(self, action):
         r"""Runs one transition step."""
         reward, terminated = 0., False
-        _has_foods = list(self.has_foods)
         if action<=self.num_boxes: # 'MOVE'
             self.agent_loc = action
             reward += self.spec.reward.move[self.agent_loc]
             for b_idx in range(self.num_boxes): # box state change
-                if _has_foods[b_idx]==0 and self.rng.random()<self.spec.boxes.p_appear[b_idx]:
-                    _has_foods[b_idx] = 1
-                if _has_foods[b_idx]==1 and self.rng.random()<self.spec.boxes.p_vanish[b_idx]:
-                    _has_foods[b_idx] = 0
+                if self.has_foods[b_idx]==0 and self.rng.random()<self.spec.boxes.p_appear[b_idx]:
+                    self.has_foods[b_idx] = 1
+                if self.has_foods[b_idx]==1 and self.rng.random()<self.spec.boxes.p_vanish[b_idx]:
+                    self.has_foods[b_idx] = 0
         else: # 'FETCH'
             reward += self.spec.reward.fetch
-            if self.agent_loc<self.num_boxes and _has_foods[self.agent_loc]==1:
-                _has_foods[self.agent_loc] = 0
+            if self.agent_loc<self.num_boxes and self.has_foods[self.agent_loc]==1:
+                self.has_foods[self.agent_loc] = 0
                 reward += self.spec.reward.food
-        self.has_foods = tuple(_has_foods)
         return reward, terminated
 
     def observe_step(self):
@@ -201,3 +199,75 @@ class IdenticalBoxForaging(MultiBoxForaging):
         self.spec.boxes.p_false = self._get_array(env_param[3], self.num_boxes)
         self.spec.reward.food = env_param[4]
         self.spec.reward.move = np.array([env_param[5]]*self.num_boxes+[env_param[6]])
+
+
+class CoupledBoxForaging(gym.Env):
+
+    def __init__(self, env: MultiBoxForaging, spec=None):
+        self.env = env
+        self.action_space = env.action_space
+        self.observation_space = env.observation_space
+        self.state_space = env.state_space
+        self.rng = env.rng
+        self.spec = env.spec.clone()
+        self.spec.couple = Config(spec).fill(D_SPEC.couple)
+
+    def get_env_param(self):
+        return (
+            *self.env.get_env_param(), self.spec.couple.p,
+        )
+
+    def set_env_param(self, env_param):
+        self.env.set_env_param(env_param[:-1])
+        self.spec.couple.p = env_param[-1]
+
+    def get_state(self):
+        return self.env.get_state()
+
+    def set_state(self, state):
+        self.env.set_state(state)
+
+    def query_states(self):
+        return self.env.query_states()
+
+    def reset(self, seed=None):
+        return self.env.reset(seed)
+
+    def step(self, action):
+        reward, terminated = self.env.transition_step(action)
+        if action<=self.env.num_boxes:
+            self.couple_step()
+        observation = self.env.observe_step()
+        truncated, info = False, {}
+        return observation, reward, terminated, truncated, info
+
+    def couple_step(self):
+        for _ in range(self.spec.couple.num_steps):
+            i, j = self.rng.choice(self.env.num_boxes, 2, replace=False)
+            if self.spec.couple.p>0 and self.has_foods[i]!=self.has_foods[j]:
+                p = self.spec.couple.p
+                if self.rng.random()<p:
+                    if self.rng.random()<0.5:
+                        self.has_foods[i] = 0
+                        self.has_foods[j] = 0
+                    else:
+                        self.has_foods[i] = 1
+                        self.has_foods[j] = 1
+            if self.spec.couple.p<0 and self.has_foods[i]==self.has_foods[j]:
+                p = -self.spec.couple.p
+                if self.rng.random()<p:
+                    if self.rng.random()<0.5:
+                        self.has_foods[i] = 0
+                        self.has_foods[j] = 1
+                    else:
+                        self.has_foods[i] = 1
+                        self.has_foods[j] = 0
+
+
+def make_coupled_env(env_name, env_spec):
+    config = Config({'_target_': env_name})
+    env_spec = Config(env_spec)
+    couple_spec = env_spec.pop('couple', None)
+    env = config.instantiate(spec=env_spec)
+    env = CoupledBoxForaging(env, couple_spec)
+    return env

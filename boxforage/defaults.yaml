@@ -20,3 +20,7 @@ multi_box:
     fetch: -2.
     move_box: -1.
     move_center: -0.5
+
+couple:
+  p: 0. # [-1, 1], positive/negative coupling for a pair of boxes
+  num_steps: 1 # number of modifying steps
