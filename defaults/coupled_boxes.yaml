@@ -1,14 +1,11 @@
 agent:
   env:
-    name: 'boxforage.multi_box.make_coupled_env'
-    env_name: 'boxforage.multi_box.IdenticalBoxForaging'
-    env_spec:
+    name: 'boxforage.multi_box.SimpleBoxForaging'
+    param: [0.2, 0.05, 0.8, 10., -1., -0.5, 0.2]
+    spec:
       boxes:
         num_boxes: 2
         num_shades: 5
-      couple:
-        num_steps: 1
-    param: [0.2, 0.05, 0.8, 0.2, 10., -1., -0.5, 0.2]
   model:
     distribution:
       p_s:

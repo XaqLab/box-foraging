@@ -3,13 +3,12 @@ from jarvis.config import Config, from_cli
 from irc.manager import IRCManager
 
 config = Config({
-    'env_param_grid': 'param_grids/single_box.yaml',
+    'env_param_grid': 'param_grids/indie_boxes.yaml',
     'seeds': None,
     'num_epochs': 12,
-    'count': 6,
+    'count': 1,
     'patience': 1.,
-    'defaults': 'defaults/single_box.yaml',
-    'device': 'cpu',
+    'defaults': 'defaults/indie_boxes.yaml',
 })
 
 if __name__=='__main__':

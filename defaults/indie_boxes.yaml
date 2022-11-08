@@ -1,7 +1,7 @@
 agent:
   env:
-    name: 'boxforage.multi_box.IdenticalBoxForaging'
-    param: [0.2, 0.05, 0.8, 0.2, 10., -1., -0.5]
+    name: 'boxforage.multi_box.SimpleBoxForaging'
+    param: [0.2, 0.05, 0.8, 10., -1., -0.5, 0.]
     spec:
       boxes:
         num_boxes: 2
