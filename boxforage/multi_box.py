@@ -47,8 +47,6 @@ class MultiBoxForaging(gym.Env):
             self.spec.boxes[key] = self._get_array(
                 self.spec.boxes[key], self.num_boxes,
             )
-        if self.spec.couple.p==0:
-            self.spec.couple.num_steps = 0
 
         self.state_space = MultiDiscrete( # box states and agent position
             [2]*self.num_boxes+[self.num_boxes+1]
