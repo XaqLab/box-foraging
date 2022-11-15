@@ -60,4 +60,6 @@ analysis. `query_states` takes no arguments and returns a list of states, `state
 point, so that the user can visualize belief traces during an episode.
 
 ### Examples
-TODO: some examples of using `irc`.
+```bash
+python demo-train.py env_param=[0.2,0.6,10.] seed=1 num_epochs=8
+```

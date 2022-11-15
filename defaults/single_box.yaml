@@ -1,0 +1,16 @@
+agent:
+  env:
+    name: 'boxforage.single_box.SingleBoxForaging'
+    param: [0.2, 0.8, 10.]
+    spec:
+      box:
+        num_shades: 4
+  model:
+    distribution: {}
+    estimate:
+      p_s:
+        num_samples: 1000
+        num_epochs: 5
+        batch_size: 64
+        optimizer:
+          lr: 0.05

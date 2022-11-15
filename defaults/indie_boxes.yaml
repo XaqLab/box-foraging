@@ -1,0 +1,27 @@
+agent:
+  env:
+    name: 'boxforage.multi_box.SimpleBoxForaging'
+    param: [0.2, 0.05, 0.8, 10., -1., -0.5, 0.]
+    spec:
+      boxes:
+        num_boxes: 2
+        num_shades: 5
+  model:
+    distribution:
+      p_s:
+        idxs: [[0], [1], [2]]
+      p_o_s:
+        idxs: [[0], [1], [2]]
+    estimate:
+      p_s:
+        num_samples: 1000
+        num_epochs: 2
+        batch_size: 32
+        optimizer:
+          lr: 0.05
+      p_s_o:
+        num_samples: 10000
+        num_epochs: 100
+      p_o_s:
+        num_samples: 10000
+        num_epochs: 100
