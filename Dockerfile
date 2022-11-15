@@ -8,7 +8,7 @@ RUN touch /root/.ssh/known_hosts
 RUN ssh-keyscan github.com >> /root/.ssh/known_hosts
 RUN git clone -b 0.5 git@github.com:lizhe07/jarvis.git
 RUN git clone -b 0.2 git@github.com:XaqLab/irc-gym.git
-RUN git clone -b irc-0.2 git@github.com:XaqLab/box-foraging.git
+RUN git clone git@github.com:XaqLab/box-foraging.git
 
 FROM base as final
 COPY --from=git-repos /jarvis /jarvis
