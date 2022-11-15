@@ -104,6 +104,7 @@ def plot_multi_box_episode(episode, num_shades=None, figsize=(5, 4)):
 
     aspect = num_steps/(num_boxes+1)*fig_h/fig_w*(height/0.9)
     ax = plt.axes([0.05, 2*gap+height, 0.9, height])
+    # observation
     h = ax.imshow(
         observations[:, :num_boxes].T, aspect=aspect, extent=[-0.5, num_steps+0.5, -0.5, num_boxes-0.5],
         vmin=0, vmax=num_shades, origin='lower', cmap='coolwarm',
@@ -111,13 +112,14 @@ def plot_multi_box_episode(episode, num_shades=None, figsize=(5, 4)):
     cax = plt.axes([0.97, 2*gap+height, 0.03, height])
     cbar = plt.colorbar(h, cax=cax, label='Color cue')
     cbar.set_ticks([0, num_shades])
-    idxs, = np.nonzero((actions!=num_boxes+1)|(observations[:-1, -1]==num_boxes))
+    # action
     t = np.arange(num_steps)
-    ax.scatter(t[idxs], observations[idxs, -1], color='blue', marker='.', s=10)
+    idxs, = np.nonzero((actions!=num_boxes+1)|(observations[:-1, -1]==num_boxes)) # move
+    ax.scatter(t[idxs], observations[idxs+1, -1], color='blue', marker='.', s=10)
     idxs, = np.nonzero((actions==num_boxes+1)&(observations[:-1, -1]<num_boxes)&(rewards>0))
-    h_true = ax.scatter(t[idxs], observations[idxs, -1], color='magenta', marker='o', s=50)
+    h_true = ax.scatter(t[idxs], observations[idxs+1, -1], color='magenta', marker='o', s=50)
     idxs, = np.nonzero((actions==num_boxes+1)&(observations[:-1, -1]<num_boxes)&(rewards<0))
-    h_false = ax.scatter(t[idxs], observations[idxs, -1], color='salmon', marker='x', s=50)
+    h_false = ax.scatter(t[idxs], observations[idxs+1, -1], color='salmon', marker='x', s=50)
     ax.legend([h_true, h_false], ['Hit', 'Miss'], loc='upper left', fontsize=12)
     ax.set_xlim([-0.5, num_steps+0.5])
     ax.set_ylim([-0.5, num_boxes+0.5])
