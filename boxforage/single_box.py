@@ -46,7 +46,7 @@ class SingleBoxForaging(gym.Env):
 
         self.rng = rng if isinstance(rng, RandGen) else np.random.default_rng(rng)
 
-    def get_env_param(self):
+    def get_param(self):
         r"""Returns environment parameters."""
         env_param = (
             self.spec.box.p_appear,
@@ -55,7 +55,7 @@ class SingleBoxForaging(gym.Env):
         )
         return env_param
 
-    def set_env_param(self, env_param):
+    def set_param(self, env_param):
         r"""Updates environment with parameters."""
         self.spec.box.p_appear = env_param[0]
         self.spec.box.p_cue = env_param[1]
