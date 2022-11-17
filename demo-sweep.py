@@ -7,7 +7,7 @@ config = Config({
     'seeds': None,
     'num_epochs': 12,
     'count': 1,
-    'patience': 1.,
+    'patience': 4.,
     'defaults': 'defaults/indie_boxes.yaml',
 })
 
