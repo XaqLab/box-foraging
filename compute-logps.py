@@ -21,6 +21,7 @@ if __name__=='__main__':
     env_param_grid = cli_args.pop('env_param_grid')
     if isinstance(env_param_grid, str):
         with open(env_param_grid) as f:
+            print(f"Environment parameter grid loaded from '{env_param_grid}'.")
             env_param_grid = yaml.safe_load(f)
     agent_seeds = cli_args.pop('agent_seeds')
     belief_seeds = cli_args.pop('belief_seeds')

@@ -202,7 +202,7 @@ class MultiBoxForaging(gym.Env):
         return observation
 
 
-class SimpleBoxForaging(MultiBoxForaging):
+class SimpleBoxesForaging(MultiBoxForaging):
     r"""Multi-box foraging with simple boxes.
 
     Box parameters are assumed to be the same, and `p_true+p_false==1` always
@@ -211,7 +211,7 @@ class SimpleBoxForaging(MultiBoxForaging):
     """
 
     def __init__(self, **kwargs):
-        super(SimpleBoxForaging, self).__init__(**kwargs)
+        super(SimpleBoxesForaging, self).__init__(**kwargs)
         for key in ['p_appear', 'p_vanish', 'p_true', 'p_false']:
             assert len(np.unique(self.spec.boxes[key]))==1
         assert self.spec.boxes['p_true'][0]+self.spec.boxes['p_false'][0]==1

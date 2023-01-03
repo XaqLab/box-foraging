@@ -1,6 +1,6 @@
 agent:
   env:
-    _target_: 'boxforage.multi_box.SimpleBoxForaging'
+    _target_: 'boxforage.multi_box.SimpleBoxesForaging'
     spec:
       boxes:
         num_boxes: 2

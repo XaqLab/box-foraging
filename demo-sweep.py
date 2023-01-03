@@ -16,7 +16,7 @@ if __name__=='__main__':
     env_param_grid = cli_args.pop('env_param_grid')
     if isinstance(env_param_grid, str):
         with open(env_param_grid) as f:
-            print("Environment parameter grid loaded from {env_param_grid}")
+            print(f"Environment parameter grid loaded from '{env_param_grid}'.")
             env_param_grid = yaml.safe_load(f)
     seeds = cli_args.pop('seeds')
     num_epochs = cli_args.pop('num_epochs')
