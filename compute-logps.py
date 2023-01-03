@@ -11,6 +11,7 @@ cli_args = Config({
     'min_optimality': 0.98,
     'count': 1,
     'patience': 4.,
+    'disp_interval': 20,
     'defaults': 'irc_defaults/single_box.yaml',
 })
 
@@ -28,11 +29,12 @@ if __name__=='__main__':
 
     count = cli_args.pop('count')
     patience = cli_args.pop('patience')
+    disp_interval = cli_args.pop('disp_interval')
 
     manager = IRCManager(**cli_args)
     manager.compute_logps(
         episode_path=episode_path, env_param_grid=env_param_grid,
         agent_seeds=agent_seeds, belief_seeds=belief_seeds,
         min_epoch=min_epoch, min_optimality=min_optimality,
-        count=count, patience=patience,
+        count=count, patience=patience, disp_interval=disp_interval,
     )
