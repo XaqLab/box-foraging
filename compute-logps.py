@@ -11,7 +11,7 @@ cli_args = Config({
     'min_optimality': 0.98,
     'count': 1,
     'patience': 4.,
-    'disp_interval': 20,
+    'disp_interval': 10,
     'defaults': 'irc_defaults/single_box.yaml',
 })
 
