@@ -10,7 +10,7 @@ cli_args = Config({
     'min_epoch': 20,
     'min_optimality': 0.98,
     'count': 1,
-    'patience': 4.,
+    'patience': 0.1,
     'disp_interval': 10,
     'defaults': 'irc_defaults/single_box.yaml',
 })
