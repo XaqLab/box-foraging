@@ -211,7 +211,7 @@ class SimpleBoxesForaging(MultiBoxForaging):
     """
 
     def __init__(self, **kwargs):
-        super(SimpleBoxesForaging, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         for key in ['p_appear', 'p_vanish', 'p_true', 'p_false']:
             assert len(np.unique(self.spec.boxes[key]))==1
         assert self.spec.boxes['p_true'][0]+self.spec.boxes['p_false'][0]==1
