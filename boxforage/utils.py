@@ -22,11 +22,11 @@ def plot_single_box_episode(episode, num_shades=None, figsize=(5, 4)):
     ax = plt.axes([0.05, 3*gap+2*height, 0.9, height])
     h = ax.imshow(
         states.T, aspect=aspect, extent=[-0.5, num_steps+0.5, -0.5, 0.5],
-        vmin=0, vmax=1, origin='lower', cmap='coolwarm',
+        vmin=0, vmax=1, origin='lower', cmap=plt.get_cmap('coolwarm', 2),
     )
     cax = plt.axes([0.97, 3*gap+2*height, 0.03, height])
     cbar = plt.colorbar(h, cax=cax, label='Has food')
-    cbar.set_ticks([0, 1])
+    cbar.set_ticks([0.25, 0.75])
     cbar.set_ticklabels(['F', 'T'])
     ax.spines['left'].set_visible(False)
     ax.set_xlim([-0.5, num_steps+0.5])
@@ -37,11 +37,12 @@ def plot_single_box_episode(episode, num_shades=None, figsize=(5, 4)):
     ax = plt.axes([0.05, 2*gap+height, 0.9, height])
     h = ax.imshow(
         observations.T, aspect=aspect, extent=[-0.5, num_steps+0.5, -0.5, 0.5],
-        vmin=0, vmax=num_shades, origin='lower', cmap='coolwarm',
+        vmin=0, vmax=num_shades, origin='lower', cmap=plt.get_cmap('coolwarm', num_shades+1),
     )
     cax = plt.axes([0.97, 2*gap+height, 0.03, height])
     cbar = plt.colorbar(h, cax=cax, label='Color cue')
-    cbar.set_ticks([0, num_shades])
+    cbar.set_ticks([0.5, num_shades-0.5])
+    cbar.set_ticklabels([0, num_shades])
     idxs = (actions==1)&(rewards>0)
     h_true = ax.scatter(np.arange(num_steps)[idxs], np.zeros(sum(idxs)), color='magenta', marker='o', s=50)
     idxs = (actions==1)&(rewards<0)
@@ -90,11 +91,11 @@ def plot_multi_box_episode(episode, num_shades=None, figsize=(5, 4)):
     ax = plt.axes([0.05, 3*gap+2*height, 0.9, height])
     h = ax.imshow(
         states[:, :num_boxes].T, aspect=aspect, extent=[-0.5, num_steps+0.5, -0.5, num_boxes-0.5],
-        vmin=0, vmax=1, origin='lower', cmap='coolwarm',
+        vmin=0, vmax=1, origin='lower', cmap=plt.get_cmap('coolwarm', 2),
     )
     cax = plt.axes([0.97, 3*gap+2*height, 0.03, height])
     cbar = plt.colorbar(h, cax=cax, label='Has food')
-    cbar.set_ticks([0, 1])
+    cbar.set_ticks([0.25, 0.75])
     cbar.set_ticklabels(['F', 'T'])
     ax.set_xlim([-0.5, num_steps+0.5])
     ax.set_xticks([0, num_steps])
@@ -107,11 +108,12 @@ def plot_multi_box_episode(episode, num_shades=None, figsize=(5, 4)):
     # observation
     h = ax.imshow(
         observations[:, :num_boxes].T, aspect=aspect, extent=[-0.5, num_steps+0.5, -0.5, num_boxes-0.5],
-        vmin=0, vmax=num_shades, origin='lower', cmap='coolwarm',
+        vmin=0, vmax=num_shades, origin='lower', cmap=plt.get_cmap('coolwarm', num_shades+1),
     )
     cax = plt.axes([0.97, 2*gap+height, 0.03, height])
     cbar = plt.colorbar(h, cax=cax, label='Color cue')
-    cbar.set_ticks([0, num_shades])
+    cbar.set_ticks([0.5, num_shades-0.5])
+    cbar.set_ticklabels([0, num_shades])
     # action
     t = np.arange(num_steps)
     idxs, = np.nonzero((actions!=num_boxes+1)|(observations[:-1, -1]==num_boxes)) # move
