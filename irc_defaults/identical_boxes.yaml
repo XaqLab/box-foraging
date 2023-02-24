@@ -1,0 +1,9 @@
+env:
+  _target_: boxforage.env.IdenticalBoxesEnv
+  num_boxes: 2
+  num_shades: 5
+model:
+  p_s:
+    idxs: [[0], [1], [2]]
+  p_o:
+    idxs: [[0], [1], [2]]

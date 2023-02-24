@@ -1,17 +1,20 @@
 from jarvis.config import Config, from_cli
 from irc.manager import IRCManager
 
-cli_args = Config({
-    'env_param': None, 'seed': None,
-    'num_epochs': 12,
-    'defaults': 'irc_defaults/single_box.yaml',
+args = Config({
+    'store_dir': 'irc_store',
+    'agent_defaults': 'irc_defaults/identical_boxes.yaml',
+    'env_param': None,
+    'seed': None,
+    'num_epochs': 30,
 })
 
 if __name__=='__main__':
-    cli_args.update(from_cli())
-    env_param = cli_args.pop('env_param')
-    seed = cli_args.pop('seed')
-    num_epochs = cli_args.pop('num_epochs')
-
-    manager = IRCManager(**cli_args)
-    manager.train_agent(env_param, seed, num_epochs=num_epochs)
+    args.update(from_cli())
+    manager = IRCManager(
+        store_dir=args.store_dir,
+        agent_defaults=args.agent_defaults,
+    )
+    manager.train_agent(
+        args.env_param, args.seed, args.num_epochs,
+    )
