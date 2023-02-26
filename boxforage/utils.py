@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from itertools import product
 
-def plot_episode(episode, num_shades=None, figsize=(5, 4)):
+def plot_episode(episode, num_shades=None, plot_marginal=False, figsize=(5, 4)):
     num_boxes = episode['states'].shape[1]-1
     num_steps = episode['num_steps']
     states = episode['states']
@@ -10,7 +10,7 @@ def plot_episode(episode, num_shades=None, figsize=(5, 4)):
     actions = episode['actions']
     rewards = episode['rewards']
     has_foods = np.array(list(product(range(2), repeat=num_boxes)))
-    assert not np.any(episode['q_states'][..., :2]-has_foods)
+    assert not np.any(episode['q_states'][..., :2]-has_foods), "Unexpected query states."
     q_probs = episode['q_probs']
     if num_shades is None:
         num_shades = observations.max()
@@ -63,14 +63,18 @@ def plot_episode(episode, num_shades=None, figsize=(5, 4)):
     ax.set_yticks(range(num_boxes+1))
     ax.set_yticklabels([f'Box {i}' for i in range(num_boxes)]+['Center'])
 
-    probs = np.zeros((num_steps+1, num_boxes))
-    for b_idx in range(num_boxes):
-        idxs = has_foods[:, b_idx]==1
-        probs[:, b_idx] = q_probs[:, idxs].sum(axis=1)
-    aspect = num_steps/num_boxes*fig_h/fig_w*(height/0.9)
+    if plot_marginal:
+        probs = np.zeros((num_steps+1, num_boxes))
+        for b_idx in range(num_boxes):
+            idxs = has_foods[:, b_idx]==1
+            probs[:, b_idx] = q_probs[:, idxs].sum(axis=1)
+        aspect = num_steps/num_boxes*fig_h/fig_w*(height/0.9)
+    else:
+        probs = q_probs
+        aspect = num_steps/(2**num_boxes)*fig_h/fig_w*(height/0.9)
     ax = plt.axes([0.05, gap, 0.9, height])
     h = ax.imshow(
-        probs.T, aspect=aspect, extent=[-0.5, num_steps+0.5, -0.5, num_boxes-0.5],
+        probs.T, aspect=aspect, extent=[-0.5, num_steps+0.5, -0.5, probs.shape[1]-0.5],
         vmin=0, vmax=1, origin='lower', cmap='coolwarm',
     )
     cax = plt.axes([0.97, gap, 0.03, height])
@@ -78,7 +82,13 @@ def plot_episode(episode, num_shades=None, figsize=(5, 4)):
     cbar.set_ticks([0, 1])
     ax.set_xlim([-0.5, num_steps+0.5])
     ax.set_xticks([0, num_steps])
-    ax.set_yticks(range(num_boxes))
-    ax.set_yticklabels([f'Box {i}' for i in range(num_boxes)])
+    if plot_marginal:
+        ax.set_yticks(range(num_boxes))
+        ax.set_yticklabels([f'Box {i}' for i in range(num_boxes)])
+    else:
+        ax.set_yticks(range(2**num_boxes))
+        ax.set_yticklabels([
+            tuple(has_foods[i].astype(int)) for i in range(2**num_boxes)
+        ])
     ax.set_xlabel('Time')
     return fig
