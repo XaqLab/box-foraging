@@ -1,6 +1,6 @@
 - [0.1, 0.2, 0.3] # p_appear
 - [0.05, 0.1] # p_vanish
-- [0.6, 0.8, 0.9] # p_true
+- [0.6, 0.8, 0.9] # p_cue
 - [] # lambda_center
 - [] # r_food
 - [] # r_move
