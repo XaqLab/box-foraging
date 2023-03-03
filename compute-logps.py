@@ -23,19 +23,19 @@ if __name__=='__main__':
     if isinstance(env_param_grid, str):
         with open(env_param_grid, 'r') as f:
             env_param_grid = yaml.safe_load(f)
+    likelihood_path = cli_args.pop('likelihood_path')
+    if likelihood_path is None:
+        now = datetime.now()
+        likelihood_path = 'likelihood_{}.pickle'.format(now.strftime('%H%M-%m%y'))
     counts, logps = manager.compute_logps(
         observations, actions,
         env_param_grid=env_param_grid,
         **cli_args,
     )
-    likelihood_path = cli_args.pop('likelihood_path')
-    if likelihood_path is None:
-        now = datetime.now()
-        likelihood_path = 'likelihoods_{}.pickle'.format(now.strftime('%H%M-%m%y'))
     with open(likelihood_path, 'wb') as f:
         pickle.dump({
             'observations': observations, 'actions': actions,
             'defaults': manager.defaults.asdict(),
             'env_param_grid': env_param_grid,
             'counts': counts, 'logps': logps, 
-        })
+        }, f)
