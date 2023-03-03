@@ -1,41 +1,41 @@
-import yaml
+import yaml, pickle
+from datetime import datetime
 from jarvis.config import Config, from_cli
-from irc.manager import IRCManager
+from irc.manager import AgentManager
 
 cli_args = Config({
     'episode_path': None,
-    'env_param_grid': 'param_grids/single_box.yaml',
-    'agent_seeds': None,
-    'belief_seeds': None,
-    'min_epoch': 20,
-    'min_optimality': 0.98,
-    'count': 1,
-    'patience': 0.1,
-    'disp_interval': 10,
-    'defaults': 'irc_defaults/single_box.yaml',
+    'defaults': 'irc_defaults/identical_boxes.yaml',
+    'env_param_grid': 'param_grids/identical_boxes.yaml',
+    'likelihood_path': None,
 })
 
 if __name__=='__main__':
     cli_args.update(from_cli())
-    episode_path = cli_args.pop('episode_path')
+    with open(cli_args.pop('episode_path'), 'rb') as f:
+        saved = pickle.load(f)
+    observations = saved['observations']
+    actions = saved['actions']
+    manager = AgentManager(
+        defaults=cli_args.pop('defaults'),
+    )
     env_param_grid = cli_args.pop('env_param_grid')
     if isinstance(env_param_grid, str):
-        with open(env_param_grid) as f:
-            print(f"Environment parameter grid loaded from '{env_param_grid}'.")
+        with open(env_param_grid, 'r') as f:
             env_param_grid = yaml.safe_load(f)
-    agent_seeds = cli_args.pop('agent_seeds')
-    belief_seeds = cli_args.pop('belief_seeds')
-    min_epoch = cli_args.pop('min_epoch')
-    min_optimality = cli_args.pop('min_optimality')
-
-    count = cli_args.pop('count')
-    patience = cli_args.pop('patience')
-    disp_interval = cli_args.pop('disp_interval')
-
-    manager = IRCManager(**cli_args)
-    manager.compute_logps(
-        episode_path=episode_path, env_param_grid=env_param_grid,
-        agent_seeds=agent_seeds, belief_seeds=belief_seeds,
-        min_epoch=min_epoch, min_optimality=min_optimality,
-        count=count, patience=patience, disp_interval=disp_interval,
+    counts, logps = manager.compute_logps(
+        observations, actions,
+        env_param_grid=env_param_grid,
+        **cli_args,
     )
+    likelihood_path = cli_args.pop('likelihood_path')
+    if likelihood_path is None:
+        now = datetime.now()
+        likelihood_path = 'likelihoods_{}.pickle'.format(now.strftime('%H%M-%m%y'))
+    with open(likelihood_path, 'wb') as f:
+        pickle.dump({
+            'observations': observations, 'actions': actions,
+            'defaults': manager.defaults.asdict(),
+            'env_param_grid': env_param_grid,
+            'counts': counts, 'logps': logps, 
+        })
