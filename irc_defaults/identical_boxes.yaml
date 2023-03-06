@@ -1,5 +1,5 @@
 env:
-  _target_: boxforage.env.IdenticalBoxesEnv
+  _target_: irc.examples.IdenticalBoxesEnv
   num_boxes: 2
   num_shades: 5
 model:
