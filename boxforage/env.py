@@ -5,39 +5,6 @@ from typing import Union
 from jarvis.config import Config
 from irc.examples import FoodBoxesEnv
 
-
-class IdenticalBoxesEnv(FoodBoxesEnv):
-    r"""Foraging environment with identical boxes.
-
-    Parameters of the boxes are the same, while food availability and color cues
-    are still independent.
-
-    """
-
-    def __init__(self,
-        p_appear: float = 0.2,
-        p_vanish: float = 0.05,
-        p_cue: float = 0.6,
-        **kwargs,
-    ):
-        super().__init__(p_appear=p_appear, p_vanish=p_vanish, p_cue=p_cue, **kwargs)
-
-    def get_param(self):
-        env_param = np.array([
-            self.p_appear[0], self.p_vanish[0], self.p_cue[0],
-            self.lambda_center, self.r_food, self.r_move,
-        ])
-        return env_param
-
-    def set_param(self, env_param):
-        assert len(env_param)==6
-        self.p_appear = np.full(self.num_boxes, fill_value=env_param[0])
-        self.p_vanish = np.full(self.num_boxes, fill_value=env_param[1])
-        self.p_cue = np.full(self.num_boxes, fill_value=env_param[2])
-        self.lambda_center = env_param[3]
-        self.r_food = env_param[4]
-        self.r_move = env_param[5]
-
 class CoupledWrapper:
     r"""A wrapper to couple food boxes.
 
@@ -67,7 +34,7 @@ class CoupledWrapper:
         if env is None or isinstance(env, dict):
             env = Config(env)
             if '_target_' not in env:
-                env._target_ = 'boxforage.env.IdenticalBoxesEnv'
+                env._target_ = 'irc.examples.IdenticalBoxesEnv'
             env = env.instantiate()
         else:
             assert isinstance(env, FoodBoxesEnv)
