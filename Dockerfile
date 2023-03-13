@@ -6,8 +6,8 @@ RUN mkdir /root/.ssh/
 COPY id_ed25519 /root/.ssh/id_ed25519
 RUN touch /root/.ssh/known_hosts
 RUN ssh-keyscan github.com >> /root/.ssh/known_hosts
-RUN git clone -b 0.6 git@github.com:lizhe07/jarvis.git
-RUN git clone -b 0.3 git@github.com:XaqLab/irc-gym.git
+RUN git clone git@github.com:lizhe07/jarvis.git
+RUN git clone git@github.com:XaqLab/irc-gym.git
 RUN git clone git@github.com:XaqLab/box-foraging.git
 
 FROM base as final
