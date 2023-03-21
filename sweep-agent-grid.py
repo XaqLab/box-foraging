@@ -5,6 +5,7 @@ cli_args = Config({
     'store_dir': 'irc_store',
     'defaults': 'irc_defaults/identical_boxes.yaml',
     'env_param_grid': 'param_grids/identical_boxes.yaml',
+    'choices': None,
     'seeds': None,
 })
 
