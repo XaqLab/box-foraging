@@ -7,7 +7,4 @@ model:
   p_s:
     idxs: [[0, 1], [2]]
   p_o:
-    idxs: [[0, 1], [2]]
-train:
-  init: {'mse_reg': 0.2}
-  tune: {'mse_reg': 0.2}
+    idxs: [[0], [1], [2]]
