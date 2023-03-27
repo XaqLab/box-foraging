@@ -40,6 +40,9 @@ class CoupledWrapper:
             assert isinstance(env, FoodBoxesEnv)
         self.env: FoodBoxesEnv = env
 
+        self.param_low = np.array([*self.env.param_low, 0])
+        self.param_high = np.array([*self.env.param_high, 1])
+
         self.state_space = self.env.state_space
         self.observation_space = self.env.observation_space
         self.action_space = self.env.action_space
